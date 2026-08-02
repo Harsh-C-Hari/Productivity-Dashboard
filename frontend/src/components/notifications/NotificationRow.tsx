@@ -1,10 +1,10 @@
 import { useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { formatDistanceToNow, isPast } from "date-fns";
 import { Check, Trash2, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NOTIFICATION_CATEGORY_META } from "@/lib/notificationMeta";
-import { useMarkNotificationRead, useMarkNotificationUnread, useDeleteNotification, NOTIFICATIONS_KEY } from "@/hooks/useNotificationCenter";
+import { useMarkNotificationRead, useDeleteNotification, NOTIFICATIONS_KEY } from "@/hooks/useNotificationCenter";
 import { PROJECT_MEMBERS_KEY } from "@/hooks/useProjectMembers";
 import { PROJECT_INVITATIONS_KEY } from "@/hooks/useProjectInvitations";
 import { useNotifications as useToast } from "@/context/NotificationContext";
@@ -25,7 +25,6 @@ export function NotificationRow({ notification }: NotificationRowProps) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const markRead = useMarkNotificationRead();
-  const markUnread = useMarkNotificationUnread();
   const deleteNotification = useDeleteNotification();
   const meta = NOTIFICATION_CATEGORY_META[notification.category];
   const Icon = meta.icon;
@@ -34,12 +33,27 @@ export function NotificationRow({ notification }: NotificationRowProps) {
     ? notification.action_url.replace("/invite/", "")
     : null;
 
+  const isInvitationNotification = notification.category === "project_invitation" && !!token;
+
+  // Live status for this invitation -- the notification itself doesn't
+  // update once accepted/rejected elsewhere (e.g. via the /invite/{token}
+  // landing page or the Project Members panel), so Accept/Reject here must
+  // be gated on a fresh fetch rather than trusting the notification's own
+  // (now potentially stale) presence.
+  const { data: invitation, isLoading: invitationLoading } = useQuery({
+    queryKey: ["invitation-preview", token],
+    queryFn: () => api.getInvitationByToken(token as string),
+    enabled: isInvitationNotification,
+    retry: false,
+  });
+
   const accept = useMutation({
     mutationFn: () => api.acceptInvitation(token as string),
     onSuccess: () => {
       toast("Invitation accepted", "success");
       markRead.mutate(notification.id);
       qc.invalidateQueries({ queryKey: NOTIFICATIONS_KEY });
+      qc.invalidateQueries({ queryKey: ["invitation-preview", token] });
       if (notification.project_id) {
         qc.invalidateQueries({ queryKey: [...PROJECT_MEMBERS_KEY, notification.project_id] });
         qc.invalidateQueries({ queryKey: [...PROJECT_INVITATIONS_KEY, notification.project_id] });
@@ -54,6 +68,7 @@ export function NotificationRow({ notification }: NotificationRowProps) {
       toast("Invitation declined", "info");
       markRead.mutate(notification.id);
       qc.invalidateQueries({ queryKey: NOTIFICATIONS_KEY });
+      qc.invalidateQueries({ queryKey: ["invitation-preview", token] });
       if (notification.project_id) {
         qc.invalidateQueries({ queryKey: [...PROJECT_INVITATIONS_KEY, notification.project_id] });
       }
@@ -61,7 +76,16 @@ export function NotificationRow({ notification }: NotificationRowProps) {
     onError: (err: Error) => toast(err.message || "Couldn't decline invitation", "error"),
   });
 
-  const isPendingInvitation = notification.category === "project_invitation" && !!token;
+  // Only offer Accept/Reject while the invitation is still actually
+  // actionable -- i.e. we've confirmed (via a live fetch, not just the
+  // notification's own category) that it's still "pending" and unexpired.
+  // Already accepted/rejected/expired/revoked invitations render no
+  // actions at all, instead of buttons that the backend would just reject.
+  const isPendingInvitation =
+    isInvitationNotification &&
+    !invitationLoading &&
+    invitation?.status === "pending" &&
+    !isPast(new Date(invitation.expires_at));
 
   function handleOpen() {
     if (!notification.is_read) markRead.mutate(notification.id);
@@ -114,16 +138,16 @@ export function NotificationRow({ notification }: NotificationRowProps) {
       </button>
 
       <div className="flex shrink-0 items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          title={notification.is_read ? "Mark unread" : "Mark read"}
-          onClick={() =>
-            notification.is_read ? markUnread.mutate(notification.id) : markRead.mutate(notification.id)
-          }
-        >
-          <Check className="h-3.5 w-3.5" />
-        </Button>
+        {!notification.is_read && (
+          <Button
+            variant="ghost"
+            size="icon"
+            title="Mark read"
+            onClick={() => markRead.mutate(notification.id)}
+          >
+            <Check className="h-3.5 w-3.5" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"

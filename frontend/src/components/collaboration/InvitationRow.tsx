@@ -92,9 +92,11 @@ export function InvitationRow({
           <DropdownMenuItem onClick={onViewDetails}>
             <Info className="h-4 w-4" /> View details
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={copyInviteLink}>
-            <Link2 className="h-4 w-4" /> Copy invite link
-          </DropdownMenuItem>
+          {invitation.status === "pending" && expiresSoon && (
+            <DropdownMenuItem onClick={copyInviteLink}>
+              <Link2 className="h-4 w-4" /> Copy invite link
+            </DropdownMenuItem>
+          )}
           {canManage && canResend && (
             <>
               <DropdownMenuItem onClick={onResend} disabled={resending}>

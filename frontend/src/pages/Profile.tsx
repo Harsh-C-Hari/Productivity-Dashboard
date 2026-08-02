@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import {
   User as UserIcon,
@@ -9,6 +9,7 @@ import {
   Loader2,
   Save,
   MailCheck,
+  Camera,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ import { PasswordInput } from "@/components/auth/PasswordInput";
 import { PasswordStrengthMeter, passwordMeetsRequirements } from "@/components/auth/PasswordStrengthMeter";
 import { FormAlert } from "@/components/auth/FormAlert";
 import { SessionRow } from "@/components/auth/SessionRow";
+import { AvatarCropperDialog } from "@/components/profile/AvatarCropperDialog";
 import { useAuth } from "@/context/AuthContext";
 import { useNotifications } from "@/context/NotificationContext";
 import { useSessions, useRevokeSession, useRevokeOtherSessions, useLogoutAllDevices } from "@/hooks/useSessions";
@@ -70,12 +72,23 @@ function ProfileInfoCard() {
   const [locale, setLocale] = useState(user?.locale ?? "en");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pickerFile, setPickerFile] = useState<File | null>(null);
+  const [cropperOpen, setCropperOpen] = useState(false);
 
   const dirty =
     displayName !== (user?.display_name ?? "") ||
     avatarUrl !== (user?.avatar_url ?? "") ||
     timezone !== (user?.timezone ?? "UTC") ||
     locale !== (user?.locale ?? "en");
+
+  function handlePickPhoto(e: ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0];
+    e.target.value = ""; // allow re-picking the same file later
+    if (!picked || !picked.type.startsWith("image/")) return;
+    setPickerFile(picked);
+    setCropperOpen(true);
+  }
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
@@ -113,25 +126,60 @@ function ProfileInfoCard() {
           {error && <FormAlert variant="error">{error}</FormAlert>}
 
           <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-base-800">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Change photo"
+              className="group relative h-16 w-16 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-base-800"
+            >
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
-                <span className="font-display text-xl font-semibold text-muted-foreground">
+                <span className="flex h-full w-full items-center justify-center font-display text-xl font-semibold text-muted-foreground">
                   {(displayName || user?.username || "?").slice(0, 1).toUpperCase()}
                 </span>
               )}
-            </div>
+              <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                <Camera className="h-5 w-5 text-white" />
+              </span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handlePickPhoto}
+            />
             <div className="flex-1 flex flex-col gap-1.5">
               <Label htmlFor="avatar_url">Avatar URL</Label>
-              <Input
-                id="avatar_url"
-                value={avatarUrl}
-                onChange={(e) => setAvatarUrl(e.target.value)}
-                placeholder="https://…"
-              />
+              {avatarUrl.startsWith("data:") ? (
+                <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-base-900/40 px-3 py-2 text-sm text-muted-foreground">
+                  <span className="flex-1 truncate">Photo selected from your device</span>
+                  <button
+                    type="button"
+                    onClick={() => setAvatarUrl(user?.avatar_url ?? "")}
+                    className="shrink-0 text-xs font-medium text-primary hover:underline"
+                  >
+                    Undo
+                  </button>
+                </div>
+              ) : (
+                <Input
+                  id="avatar_url"
+                  value={avatarUrl}
+                  onChange={(e) => setAvatarUrl(e.target.value)}
+                  placeholder="https://… or tap your photo to upload"
+                />
+              )}
             </div>
           </div>
+
+          <AvatarCropperDialog
+            file={pickerFile}
+            open={cropperOpen}
+            onOpenChange={setCropperOpen}
+            onCropped={(dataUrl) => setAvatarUrl(dataUrl)}
+          />
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="display_name">Display name</Label>
