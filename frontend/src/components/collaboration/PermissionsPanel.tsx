@@ -24,7 +24,7 @@ export function PermissionsPanel({ projectId }: PermissionsPanelProps) {
 
   return (
     <Tabs defaultValue="matrix">
-      <TabsList>
+      <TabsList className="flex-wrap h-auto">
         <TabsTrigger value="matrix">Role Matrix</TabsTrigger>
         <TabsTrigger value="catalog">Permission Catalog</TabsTrigger>
       </TabsList>

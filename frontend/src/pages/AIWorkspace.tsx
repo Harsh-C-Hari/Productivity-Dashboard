@@ -20,6 +20,7 @@ import { AIHandoffsView } from "@/components/ai-workspace/AIHandoffsView";
 import { KnowledgeBaseView } from "@/components/ai-workspace/KnowledgeBaseView";
 import { AIAnalyticsView } from "@/components/ai-workspace/AIAnalyticsView";
 import { AIWorkspaceSettingsView } from "@/components/ai-workspace/AIWorkspaceSettingsView";
+import { useHorizontalWheelScroll } from "@/hooks/useHorizontalWheelScroll";
 
 const TABS = [
   { to: "/ai-workspace", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -35,17 +36,11 @@ const TABS = [
 
 export default function AIWorkspace() {
   const location = useLocation();
+  const tabScrollRef = useHorizontalWheelScroll<HTMLDivElement>();
 
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h1 className="font-display text-2xl font-semibold">AI Workspace</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Accounts, conversations, prompts, snapshots, handoffs, and knowledge for every assistant you work with.
-        </p>
-      </div>
-
-      <div className="glass-panel flex gap-1 overflow-x-auto rounded-xl p-1.5 no-scrollbar">
+      <div ref={tabScrollRef} className="glass-panel flex gap-1 overflow-x-auto rounded-xl p-1.5 scrollbar-thin::-webkit-scrollbar-thumb">
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from .. import models, schemas
 from ..activity_log import log_activity
-from ..project_helpers import log_timeline_event
+from ..project_helpers import log_timeline_event, get_accessible_project_ids
 from ..auth_dependencies import get_current_user, require_project_access
 
 router = APIRouter(prefix="/api/bugs", tags=["project-workspace"])
@@ -50,7 +50,11 @@ def _feature_map(db: Session) -> dict:
 
 @router.get("", response_model=List[schemas.BugOut])
 def list_bugs(
-    project_id: str = Query(..., description="Only bugs on this project are ever returned."),
+    project_id: Optional[str] = Query(
+        default=None,
+        description="Bugs on this project only. Omit to list across every project the "
+        "current user can access (used by the Dashboard's cross-project Open Bugs widget).",
+    ),
     phase_id: Optional[str] = None,
     feature_id: Optional[str] = None,
     severity: Optional[models.BugSeverity] = None,
@@ -63,8 +67,12 @@ def list_bugs(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_project_access(db, current_user, project_id, "view_tasks")
-    query = db.query(models.Bug).filter(models.Bug.project_id == project_id)
+    if project_id:
+        require_project_access(db, current_user, project_id, "view_tasks")
+        query = db.query(models.Bug).filter(models.Bug.project_id == project_id)
+    else:
+        accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+        query = db.query(models.Bug).filter(models.Bug.project_id.in_(accessible_project_ids))
     if phase_id:
         query = query.filter(models.Bug.phase_id == phase_id)
     if feature_id:

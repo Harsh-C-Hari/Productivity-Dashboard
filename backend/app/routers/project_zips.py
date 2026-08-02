@@ -17,7 +17,7 @@ from ..database import get_db
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..uploads import save_upload, delete_upload
-from ..project_helpers import log_timeline_event
+from ..project_helpers import log_timeline_event, get_accessible_project_ids
 from ..auth_dependencies import get_current_user, require_project_access
 
 router = APIRouter(prefix="/api/project-zips", tags=["ai-workspace"])
@@ -36,7 +36,11 @@ def get_zip_or_404(db: Session, zip_id: str) -> models.ProjectZip:
 
 @router.get("", response_model=List[schemas.ProjectZipOut])
 def list_project_zips(
-    project_id: str = Query(..., description="Only zips on this project are ever returned."),
+    project_id: Optional[str] = Query(
+        default=None,
+        description="Zips on this project only. Omit to list across every project the "
+        "current user can access (used by ZIP Manager's \"All projects\" filter).",
+    ),
     ai_account_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
     limit: Optional[int] = Query(default=None, ge=1, le=200),
@@ -44,8 +48,12 @@ def list_project_zips(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    require_project_access(db, current_user, project_id, "view_ai_workspace")
-    query = db.query(models.ProjectZip).filter(models.ProjectZip.project_id == project_id)
+    if project_id:
+        require_project_access(db, current_user, project_id, "view_ai_workspace")
+        query = db.query(models.ProjectZip).filter(models.ProjectZip.project_id == project_id)
+    else:
+        accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+        query = db.query(models.ProjectZip).filter(models.ProjectZip.project_id.in_(accessible_project_ids))
     if ai_account_id:
         query = query.filter(models.ProjectZip.ai_account_id == ai_account_id)
     if conversation_id:

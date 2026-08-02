@@ -175,7 +175,7 @@ export function ZipManagerView() {
             <DialogTitle>Delete this zip?</DialogTitle>
             <DialogDescription>{confirmDelete?.original_name || "This zip"} will be permanently removed.</DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Cancel</Button>
             <Button
               variant="destructive"
@@ -245,7 +245,7 @@ function ZipUploadForm({ defaultProjectId, onDone }: { defaultProjectId?: string
         <span className="text-sm text-muted-foreground">{file ? file.name : "ZIP file — click to choose"}</span>
       </button>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>AI account (optional)</Label>
           <Select value={aiAccountId || "none"} onValueChange={(v) => setAiAccountId(v === "none" ? "" : v)}>
@@ -278,7 +278,7 @@ function ZipUploadForm({ defaultProjectId, onDone }: { defaultProjectId?: string
         <Textarea id="zip-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="What changed in this snapshot?" />
       </div>
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onDone}>Cancel</Button>
         <Button type="submit" disabled={uploadZip.isPending || !file || !selectedProjectId}>Upload</Button>
       </div>

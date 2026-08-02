@@ -37,3 +37,18 @@ def create_notification(
     db.commit()
     db.refresh(notification)
     return notification
+
+def delete_stale_invitation_notifications(db: Session, invitation_id: str) -> None:
+    """Remove any earlier `project_invitation` Notification rows for this
+    invitation before a fresh one is created (resend flow only). Each
+    notification's `action_url` bakes in the invitation's `token` at
+    creation time; resending rotates that token on the same invitation
+    row (see `resend_invitation`), so an older notification's link would
+    otherwise 404 forever once the token it points at no longer matches
+    anything in the DB, while still sitting in the invitee's Notification
+    Center looking actionable."""
+    db.query(models.Notification).filter(
+        models.Notification.invitation_id == invitation_id,
+        models.Notification.category == models.NotificationCategory.project_invitation,
+    ).delete(synchronize_session=False)
+    db.commit()

@@ -1366,7 +1366,7 @@ class UserBase(BaseModel):
     username: str = Field(..., min_length=1, max_length=50)
     display_name: str = Field(default="", max_length=150)
     email: str = Field(..., min_length=3, max_length=255)
-    avatar_url: str = Field(default="", max_length=500)
+    avatar_url: str = Field(default="", max_length=2_000_000)
     timezone: str = Field(default="UTC", max_length=60)
     locale: str = Field(default="en", max_length=10)
     theme: str = Field(default="dark", max_length=20)
@@ -1392,7 +1392,7 @@ class UserUpdate(BaseModel):
     username: Optional[str] = Field(default=None, min_length=1, max_length=50)
     display_name: Optional[str] = Field(default=None, max_length=150)
     email: Optional[str] = Field(default=None, min_length=3, max_length=255)
-    avatar_url: Optional[str] = Field(default=None, max_length=500)
+    avatar_url: Optional[str] = Field(default=None, max_length=2_000_000)
     timezone: Optional[str] = Field(default=None, max_length=60)
     locale: Optional[str] = Field(default=None, max_length=10)
     theme: Optional[str] = Field(default=None, max_length=20)
@@ -1769,14 +1769,14 @@ class AuthStatusOut(BaseModel):
 
 class ProfileUpdateRequest(BaseModel):
     display_name: Optional[str] = Field(default=None, max_length=150)
-    avatar_url: Optional[str] = Field(default=None, max_length=500)
+    avatar_url: Optional[str] = Field(default=None, max_length=2_000_000)
     timezone: Optional[str] = Field(default=None, max_length=60)
     locale: Optional[str] = Field(default=None, max_length=10)
     theme: Optional[str] = Field(default=None, max_length=20)
 
 
 class AvatarUpdateRequest(BaseModel):
-    avatar_url: str = Field(..., max_length=500)
+    avatar_url: str = Field(..., max_length=2_000_000)
 
 
 class DisplayNameUpdateRequest(BaseModel):

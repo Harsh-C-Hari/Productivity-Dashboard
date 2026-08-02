@@ -39,7 +39,7 @@ export function SubjectForm({ initial, onSubmit, onCancel, submitting }: Subject
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="subject-code">Course code</Label>
           <Input id="subject-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. CS 301" />
@@ -75,7 +75,7 @@ export function SubjectForm({ initial, onSubmit, onCancel, submitting }: Subject
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>

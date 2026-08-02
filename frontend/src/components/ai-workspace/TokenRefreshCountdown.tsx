@@ -142,7 +142,7 @@ export function TokenRefreshCountdown({ accountId, accountName }: { accountId: s
               onChange={(e) => setDraftValue(e.target.value)}
             />
           </div>
-          <div className="flex justify-end gap-2 mt-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-2">
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={!draftValue}>Save reminder</Button>
           </div>

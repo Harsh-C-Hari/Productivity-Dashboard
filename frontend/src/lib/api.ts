@@ -166,6 +166,26 @@ async function refreshAccessToken(): Promise<boolean> {
   return result;
 }
 
+/** FastAPI's error `detail` is a plain string for most hand-raised
+ * HTTPExceptions, but for Pydantic (422) validation failures it's an
+ * array of `{ msg, loc, type, ... }` objects -- passing that straight
+ * into `new Error(...)` stringifies it as "[object Object]". Flatten
+ * whatever shape comes back into one human-readable string. */
+function extractErrorDetail(detail: unknown): string | undefined {
+  if (detail == null) return undefined;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item) =>
+      typeof item === "string" ? item : (item as { msg?: string })?.msg ?? JSON.stringify(item)
+    );
+    return messages.join("; ") || undefined;
+  }
+  if (typeof detail === "object") {
+    return (detail as { msg?: string }).msg ?? JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 async function request<T>(path: string, options: RequestInit = {}, _retried = false): Promise<T> {
   const token = getAccessToken();
   const headers: Record<string, string> = {
@@ -183,10 +203,10 @@ async function request<T>(path: string, options: RequestInit = {}, _retried = fa
   }
 
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail: string = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail ?? detail;
+      detail = extractErrorDetail(body.detail) ?? detail;
     } catch {
       // response had no JSON body
     }
@@ -207,10 +227,10 @@ async function requestForm<T>(path: string, formData: FormData): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, { method: "POST", body: formData, headers });
 
   if (!res.ok) {
-    let detail = res.statusText;
+    let detail: string = res.statusText;
     try {
       const body = await res.json();
-      detail = body.detail ?? detail;
+      detail = extractErrorDetail(body.detail) ?? detail;
     } catch {
       // response had no JSON body
     }

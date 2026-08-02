@@ -97,7 +97,7 @@ export function TaskForm({ mode, initial, onSubmit, onCancel, submitting }: Task
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Category</Label>
           <Select value={category} onValueChange={(v) => setCategory(v as TaskCategory)}>
@@ -139,7 +139,7 @@ export function TaskForm({ mode, initial, onSubmit, onCancel, submitting }: Task
 
       {mode === "edit" && (
         <>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label>Status</Label>
               <Select value={status} onValueChange={(v) => setStatus(v as TaskStatus)}>
@@ -177,7 +177,7 @@ export function TaskForm({ mode, initial, onSubmit, onCancel, submitting }: Task
         <UrgencyBadge urgency={previewUrgency} />
       </div>
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>

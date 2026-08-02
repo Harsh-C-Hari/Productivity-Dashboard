@@ -46,7 +46,7 @@ export function TopicManager({ subjectId }: { subjectId: string }) {
               {topic.title}
               <button
                 onClick={() => deleteTopic.mutate(topic.id)}
-                className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-urgency-critical transition-opacity"
+                className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-urgency-critical transition-opacity"
                 aria-label={`Remove topic ${topic.title}`}
               >
                 <X className="h-3 w-3" />

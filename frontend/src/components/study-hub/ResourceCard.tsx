@@ -72,7 +72,7 @@ export function ResourceCard({ resource, hideSubject = false }: { resource: Reso
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-urgency-critical transition-opacity"
+            className="h-8 w-8 shrink-0 text-muted-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-urgency-critical transition-opacity"
             onClick={() => setConfirmDelete(true)}
             aria-label="Remove resource"
           >
@@ -87,7 +87,7 @@ export function ResourceCard({ resource, hideSubject = false }: { resource: Reso
             <DialogTitle>Remove "{resource.title}"?</DialogTitle>
             <DialogDescription>This can't be undone.</DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
               Cancel
             </Button>

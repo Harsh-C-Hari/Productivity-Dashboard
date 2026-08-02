@@ -154,7 +154,7 @@ export function PromptLibraryView() {
                 </div>
                 <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
                   <span>used {prompt.usage_count}×</span>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCopy(prompt)} aria-label="Copy prompt"><Copy className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => duplicatePrompt.mutate(prompt.id)} aria-label="Duplicate prompt"><Files className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditPrompt(prompt)} aria-label="Edit prompt"><Pencil className="h-3.5 w-3.5" /></Button>
@@ -206,7 +206,7 @@ export function PromptLibraryView() {
                 <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {previewPrompt.category || "uncategorized"}</span>
                 <span>updated {formatDistanceToNow(new Date(previewPrompt.updated_at), { addSuffix: true })}</span>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="ghost" onClick={() => setPreviewPrompt(null)}>Close</Button>
                 <Button className="gap-1.5" onClick={() => handleCopy(previewPrompt)}><Copy className="h-3.5 w-3.5" /> Copy prompt</Button>
               </div>
@@ -264,7 +264,7 @@ function PromptForm({ initial, onDone }: { initial?: PromptTemplate; onDone: () 
         <Label htmlFor="prompt-content">Content (Markdown)</Label>
         <Textarea id="prompt-content" value={content} onChange={(e) => setContent(e.target.value)} rows={6} className="font-mono text-xs" placeholder={"Use {{variable}} for placeholders"} required />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="prompt-category">Category</Label>
           <Input id="prompt-category" list="prompt-categories" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. debugging" disabled={favorite} />
@@ -281,7 +281,7 @@ function PromptForm({ initial, onDone }: { initial?: PromptTemplate; onDone: () 
         <input type="checkbox" checked={favorite} onChange={(e) => setFavorite(e.target.checked)} className="rounded border-white/20 bg-transparent" />
         <Star className="h-3.5 w-3.5" /> Mark as favorite
       </label>
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onDone}>Cancel</Button>
         <Button type="submit" disabled={submitting || !title.trim() || !content.trim()}>{initial ? "Save changes" : "Save prompt"}</Button>
       </div>

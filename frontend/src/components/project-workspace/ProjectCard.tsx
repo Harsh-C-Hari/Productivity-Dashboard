@@ -96,14 +96,14 @@ export function ProjectCard({ project, summary }: ProjectCardProps) {
             <Link to={`/projects/${project.id}`} className="text-xs font-medium text-primary hover:underline underline-offset-2">
               Open project →
             </Link>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditOpen(true)} aria-label="Edit project">
+            <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditOpen(true)} aria-label="Edit project">
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground hover:text-urgency-critical"
+                className="h-8 w-8 text-muted-foreground hover:text-urgency-critical"
                 onClick={() => setConfirmDelete(true)}
                 aria-label="Delete project"
               >
@@ -137,7 +137,7 @@ export function ProjectCard({ project, summary }: ProjectCardProps) {
               This also deletes every phase, feature, todo, bug, milestone, resource, and document in this project, and can't be undone.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
               Cancel
             </Button>

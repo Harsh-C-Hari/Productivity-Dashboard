@@ -58,7 +58,7 @@ export function AttachmentList({ attachments, onUpload, onDelete, uploading, cla
                 <button
                   type="button"
                   onClick={() => onDelete(att.filename)}
-                  className="text-muted-foreground hover:text-urgency-critical transition-colors shrink-0"
+                  className="flex h-8 w-8 shrink-0 -my-2 -mr-1 items-center justify-center rounded-md text-muted-foreground hover:text-urgency-critical hover:bg-white/5 transition-colors"
                   aria-label={`Remove ${att.original_name}`}
                 >
                   <X className="h-3.5 w-3.5" />

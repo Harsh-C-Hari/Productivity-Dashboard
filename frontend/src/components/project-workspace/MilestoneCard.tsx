@@ -78,14 +78,14 @@ export function MilestoneCard({ milestone }: { milestone: Milestone }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditOpen(true)}>
+          <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditOpen(true)}>
               <Pencil className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-urgency-critical"
+              className="h-8 w-8 text-muted-foreground hover:text-urgency-critical"
               onClick={() => setConfirmDelete(true)}
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -116,7 +116,7 @@ export function MilestoneCard({ milestone }: { milestone: Milestone }) {
             <DialogTitle>Delete "{milestone.title}"?</DialogTitle>
             <DialogDescription>This can't be undone.</DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
               Cancel
             </Button>

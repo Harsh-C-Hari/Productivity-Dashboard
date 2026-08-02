@@ -148,7 +148,7 @@ export function AIHandoffsView() {
               </DialogHeader>
               <div className="max-h-[60vh] overflow-y-auto flex flex-col gap-4">
                 <HandoffSection title="Completed work" content={viewHandoff.completed_work} />
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <FileListSection title="Created files" files={viewHandoff.created_files} />
                   <FileListSection title="Modified files" files={viewHandoff.modified_files} />
                 </div>
@@ -156,7 +156,7 @@ export function AIHandoffsView() {
                 <HandoffSection title="Architecture decisions & known issues" content={viewHandoff.known_issues} />
                 <HandoffSection title="Next objective" content={viewHandoff.next_objective} highlight />
               </div>
-              <div className="flex justify-end gap-2 pt-1">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
                 <Button variant="ghost" onClick={() => setViewHandoff(null)}>Close</Button>
                 <Button className="gap-1.5" onClick={() => { setEditHandoff(viewHandoff); setViewHandoff(null); }}><Pencil className="h-3.5 w-3.5" /> Edit</Button>
               </div>
@@ -171,7 +171,7 @@ export function AIHandoffsView() {
             <DialogTitle>Delete this handoff?</DialogTitle>
             <DialogDescription>This can't be undone.</DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Cancel</Button>
             <Button variant="destructive" onClick={() => { if (confirmDelete) deleteHandoff.mutate(confirmDelete.id); setConfirmDelete(null); }}>Delete</Button>
           </div>
@@ -287,7 +287,7 @@ function AIHandoffForm({ initial, onDone }: { initial?: AIHandoff; onDone: () =>
         <Textarea id="handoff-completed" value={completedWork} onChange={(e) => setCompletedWork(e.target.value)} rows={3} placeholder="Summary of what was accomplished (Markdown supported)" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="handoff-created-files">Created files (one per line)</Label>
           <Textarea id="handoff-created-files" value={createdFiles} onChange={(e) => setCreatedFiles(e.target.value)} rows={4} className="font-mono text-xs" />
@@ -313,7 +313,7 @@ function AIHandoffForm({ initial, onDone }: { initial?: AIHandoff; onDone: () =>
         <Textarea id="handoff-next" value={nextObjective} onChange={(e) => setNextObjective(e.target.value)} rows={2} placeholder="Exact next step for the next session" />
       </div>
 
-      <div className="flex justify-end gap-2 pt-1 sticky bottom-0 bg-base-950/80 backdrop-blur -mx-1 px-1 py-2">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1 sticky bottom-0 bg-base-950/80 backdrop-blur -mx-1 px-1 py-2">
         <Button type="button" variant="ghost" onClick={onDone}>Cancel</Button>
         <Button type="submit" disabled={submitting}>{initial ? "Save changes" : "Save handoff"}</Button>
       </div>

@@ -23,7 +23,7 @@ from ..database import get_db
 from .. import models, schemas
 from ..activity_log import log_activity_event
 from ..auth_dependencies import require_membership, require_permission
-from ..notification_helpers import create_notification
+from ..notification_helpers import create_notification, delete_stale_invitation_notifications
 from ..project_helpers import get_membership, get_or_create_user_by_email
 from .projects import get_project_or_404
 
@@ -273,6 +273,7 @@ def resend_invitation(
 
     existing_user = db.query(models.User).filter(models.User.email == invitation.email).first()
     if existing_user:
+        delete_stale_invitation_notifications(db, invitation.id)
         inviter_name = current_user.display_name or current_user.username
         create_notification(
             db,

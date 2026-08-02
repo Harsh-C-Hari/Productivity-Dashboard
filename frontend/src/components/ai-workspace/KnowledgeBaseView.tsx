@@ -135,7 +135,7 @@ export function KnowledgeBaseView() {
                   </div>
                   <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
                     <span className="flex items-center gap-1 truncate">{project ? <><FolderKanban className="h-3 w-3" /> {project.name}</> : "Global"}</span>
-                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditArticle(article)} aria-label="Edit article"><Pencil className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-urgency-critical" onClick={() => setConfirmDelete(article)} aria-label="Delete article"><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
@@ -186,7 +186,7 @@ export function KnowledgeBaseView() {
                 <span className="flex items-center gap-1 flex-wrap">{viewArticle.tags.map((t) => <span key={t} className="rounded-full border border-white/10 px-2 py-0.5">{t}</span>)}</span>
                 <span>updated {formatDistanceToNow(new Date(viewArticle.updated_at), { addSuffix: true })}</span>
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="ghost" onClick={() => setViewArticle(null)}>Close</Button>
                 <Button className="gap-1.5" onClick={() => { setEditArticle(viewArticle); setViewArticle(null); }}><Pencil className="h-3.5 w-3.5" /> Edit</Button>
               </div>
@@ -201,7 +201,7 @@ export function KnowledgeBaseView() {
             <DialogTitle>Delete "{confirmDelete?.title}"?</DialogTitle>
             <DialogDescription>This can't be undone.</DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Cancel</Button>
             <Button variant="destructive" onClick={() => { if (confirmDelete) deleteArticle.mutate(confirmDelete.id); setConfirmDelete(null); }}>Delete</Button>
           </div>
@@ -262,7 +262,7 @@ function KnowledgeArticleForm({ initial, onDone }: { initial?: KnowledgeArticle;
         <Label htmlFor="article-content">Content (Markdown)</Label>
         <Textarea id="article-content" value={content} onChange={(e) => setContent(e.target.value)} rows={6} className="font-mono text-xs" />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Project (optional)</Label>
           <Select value={projectId || "none"} onValueChange={(v) => setProjectId(v === "none" ? "" : v)}>
@@ -295,7 +295,7 @@ function KnowledgeArticleForm({ initial, onDone }: { initial?: KnowledgeArticle;
           <Star className="h-3.5 w-3.5" /> Favorite
         </label>
       </div>
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onDone}>Cancel</Button>
         <Button type="submit" disabled={submitting || !title.trim()}>{initial ? "Save changes" : "Save article"}</Button>
       </div>

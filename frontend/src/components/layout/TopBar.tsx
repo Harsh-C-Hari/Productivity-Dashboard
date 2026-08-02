@@ -11,11 +11,29 @@ const TITLES: Record<string, { title: string; subtitle: string }> = {
   "/": { title: "Dashboard", subtitle: "Your mission control for today" },
   "/tasks": { title: "Tasks", subtitle: "Everything on your plate" },
   "/timetable": { title: "Timetable", subtitle: "Your weekly schedule" },
+  "/study-hub": { title: "Study Hub", subtitle: "Subjects, assignments, notes, and study sessions" },
   "/projects": { title: "Projects", subtitle: "Every project, phase, and bug in one place" },
+  "/ai-workspace": {
+    title: "AI Workspace",
+    subtitle: "Accounts, conversations, prompts, snapshots, handoffs, and knowledge for every assistant you work with",
+  },
   "/notifications": { title: "Notifications", subtitle: "Invitations, reminders, and updates" },
   "/settings": { title: "Settings", subtitle: "Tune your dashboard" },
   "/profile": { title: "Profile", subtitle: "Your account, security, and sessions" },
 };
+
+/** Exact match first; otherwise fall back to the longest registered path
+ * that's a parent of the current one (e.g. `/study-hub/:subjectId` and
+ * every `/ai-workspace/*` tab inherit their section's heading instead of
+ * silently defaulting to "Dashboard" just because their own exact path
+ * was never added above). */
+function resolveTitleMeta(pathname: string) {
+  if (TITLES[pathname]) return TITLES[pathname];
+  const prefixMatch = Object.keys(TITLES)
+    .filter((path) => path !== "/" && (pathname === path || pathname.startsWith(`${path}/`)))
+    .sort((a, b) => b.length - a.length)[0];
+  return prefixMatch ? TITLES[prefixMatch] : TITLES["/"];
+}
 
 export function TopBar() {
   const { pathname } = useLocation();
@@ -23,7 +41,7 @@ export function TopBar() {
   const { user } = useAuth();
   const { data: counts } = useNotificationCounts();
   const [now, setNow] = useState(new Date());
-  const meta = TITLES[pathname] ?? TITLES["/"];
+  const meta = resolveTitleMeta(pathname);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000 * 30);
@@ -31,13 +49,13 @@ export function TopBar() {
   }, []);
 
   return (
-    <header className="flex items-center justify-between gap-4 px-4 sm:px-6 py-4 sm:py-5 border-b border-white/[0.06] bg-base-950/40 backdrop-blur-xl sticky top-0 z-30">
-      <div>
-        <h1 className="font-display text-xl sm:text-2xl font-semibold tracking-tight">{meta.title}</h1>
-        <p className="text-xs sm:text-sm text-muted-foreground">{meta.subtitle}</p>
+    <header className="flex items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-4 sm:py-5 border-b border-white/[0.06] bg-base-950/40 backdrop-blur-xl sticky top-0 z-30">
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate font-display text-lg sm:text-2xl font-semibold tracking-tight">{meta.title}</h1>
+        <p className="hidden truncate text-xs text-muted-foreground min-[360px]:block sm:text-sm">{meta.subtitle}</p>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
         <GlobalSearch />
 
         <span className="hidden sm:inline-block font-mono text-xs text-muted-foreground tabular-nums">

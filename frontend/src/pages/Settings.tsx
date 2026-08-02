@@ -37,26 +37,26 @@ export default function Settings() {
             overdue. Alerts are checked automatically while the dashboard tab is open.
           </CardDescription>
 
-          <div className="flex items-center justify-between rounded-xl border border-white/10 bg-base-900/40 p-3.5">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col items-start gap-3 rounded-xl border border-white/10 bg-base-900/40 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
               {permission === "granted" ? (
-                <BellRing className="h-4 w-4 text-urgency-low" />
+                <BellRing className="h-4 w-4 shrink-0 text-urgency-low" />
               ) : (
-                <Bell className="h-4 w-4 text-muted-foreground" />
+                <Bell className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
-              <div>
-                <p className="text-sm font-medium">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
                   {permission === "granted"
                     ? "Alerts are enabled"
                     : permission === "unsupported"
                     ? "Not supported in this browser"
                     : "Alerts are off"}
                 </p>
-                <p className="text-xs text-muted-foreground">Browser Notification API</p>
+                <p className="truncate text-xs text-muted-foreground">Browser Notification API</p>
               </div>
             </div>
             {permission !== "granted" && permission !== "unsupported" && (
-              <Button size="sm" onClick={requestPermission}>
+              <Button size="sm" onClick={requestPermission} className="w-full sm:w-auto">
                 Enable
               </Button>
             )}
@@ -77,8 +77,8 @@ export default function Settings() {
         </CardHeader>
         <CardContent>
           <CardDescription>
-            This MVP ships with a single gaming-inspired dark theme (purple + blue accents,
-            glassmorphism panels). Light mode isn't implemented yet.
+            This MVP ships with a single calm, minimal dark theme (warm neutral surfaces with a
+            restrained amber accent). Light mode isn't implemented yet.
           </CardDescription>
         </CardContent>
       </Card>

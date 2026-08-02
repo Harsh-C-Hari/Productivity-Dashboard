@@ -219,7 +219,7 @@ function AIAccountCard({
                 ? `active ${formatDistanceToNow(new Date(summary.last_active_at), { addSuffix: true })}`
                 : `updated ${formatDistanceToNow(new Date(account.updated_at), { addSuffix: true })}`}
             </button>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditOpen(true)} aria-label="Edit account">
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
@@ -260,7 +260,7 @@ function AIAccountCard({
               This also deletes its conversations and token usage history. Zip snapshots and handoffs stay, but un-link from this account.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
             <Button
               variant="destructive"
@@ -326,7 +326,7 @@ function AIAccountForm({
         <Input id="account-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Claude — Backend" required />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Provider</Label>
           <Select value={provider} onValueChange={(v) => setProvider(v as typeof provider)}>
@@ -352,7 +352,7 @@ function AIAccountForm({
         <Textarea id="account-current-task" value={currentTask} onChange={(e) => setCurrentTask(e.target.value)} rows={2} placeholder="What is this assistant working on right now?" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Status</Label>
           <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
@@ -371,7 +371,7 @@ function AIAccountForm({
         Name of the environment variable holding the real key — never paste the key itself here.
       </p>
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onDone}>Cancel</Button>
         <Button type="submit" disabled={isSubmitting || !name.trim()}>
           {initial ? "Save changes" : "Add account"}

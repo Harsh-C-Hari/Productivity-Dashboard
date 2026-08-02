@@ -153,7 +153,7 @@ export function RoadmapView({ projectId }: { projectId: string }) {
               Features, todos, bugs, and milestones linked to this phase will be unlinked, not deleted.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
               Cancel
             </Button>
@@ -243,7 +243,7 @@ function PhaseRow({ phase, index, isFirst, isLast, onDragStart, onDragEnd, onMov
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-8 w-8"
                 onClick={() => onMove(phase, -1)}
                 disabled={isFirst}
                 aria-label={`Move "${phase.title}" up`}
@@ -253,7 +253,7 @@ function PhaseRow({ phase, index, isFirst, isLast, onDragStart, onDragEnd, onMov
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-8 w-8"
                 onClick={() => onMove(phase, 1)}
                 disabled={isLast}
                 aria-label={`Move "${phase.title}" down`}
@@ -262,13 +262,13 @@ function PhaseRow({ phase, index, isFirst, isLast, onDragStart, onDragEnd, onMov
               </Button>
             </div>
             <div className="flex gap-0.5">
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit} aria-label={`Edit "${phase.title}"`}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit} aria-label={`Edit "${phase.title}"`}>
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 text-muted-foreground hover:text-urgency-critical"
+                className="h-8 w-8 text-muted-foreground hover:text-urgency-critical"
                 onClick={onDelete}
                 aria-label={`Delete "${phase.title}"`}
               >

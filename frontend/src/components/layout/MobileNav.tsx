@@ -18,8 +18,11 @@ export function MobileNav() {
   const { data: counts } = useNotificationCounts();
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.06] bg-base-950/85 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
-      <div className="flex items-center justify-around px-0.5 py-2 overflow-x-auto">
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.06] bg-base-950/85 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]"
+      aria-label="Primary"
+    >
+      <div className="flex items-stretch gap-0.5 overflow-x-auto scrollbar-thin snap-x snap-mandatory px-1 py-1.5 min-[480px]:justify-around">
         {NAV_ITEMS.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -27,7 +30,7 @@ export function MobileNav() {
             end={end}
             className={({ isActive }) =>
               cn(
-                "relative flex flex-col items-center gap-1 rounded-lg px-1.5 py-1.5 text-[9px] font-medium transition-colors shrink-0",
+                "relative flex min-w-[56px] shrink-0 snap-center flex-col items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[9px] font-medium transition-colors",
                 isActive ? "text-primary" : "text-muted-foreground"
               )
             }
@@ -36,7 +39,7 @@ export function MobileNav() {
               <>
                 <span
                   className={cn(
-                    "relative flex h-7 w-7 items-center justify-center rounded-full transition-colors",
+                    "relative flex h-8 w-8 items-center justify-center rounded-full transition-colors",
                     isActive && "bg-primary/10"
                   )}
                 >
@@ -47,7 +50,7 @@ export function MobileNav() {
                     </span>
                   )}
                 </span>
-                {label}
+                <span className="leading-none">{label}</span>
               </>
             )}
           </NavLink>

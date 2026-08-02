@@ -75,14 +75,29 @@
 
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgba(217, 167, 91, 0.35) transparent;
+    scrollbar-color: rgba(217, 167, 91, 0.55) rgba(255, 255, 255, 0.05);
   }
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: rgba(217, 167, 91, 0.35);
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
     border-radius: 999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(217, 167, 91, 0.55);
+    border-radius: 999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(217, 167, 91, 0.75);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }

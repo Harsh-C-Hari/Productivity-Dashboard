@@ -21,7 +21,7 @@ export function AuthShell({
   footer?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-base-950 px-4 py-10">
+    <div className="flex min-h-dvh w-full items-center justify-center bg-base-950 px-4 py-10">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-1/2 top-0 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-aurora opacity-[0.08] blur-3xl" />
       </div>

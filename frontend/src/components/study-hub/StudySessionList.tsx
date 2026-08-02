@@ -53,7 +53,7 @@ export function StudySessionList({ subjectId, limit = 20 }: StudySessionListProp
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-urgency-critical transition-opacity"
+                  className="h-6 w-6 shrink-0 text-muted-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:text-urgency-critical transition-opacity"
                   onClick={() => deleteSession.mutate(session.id)}
                   aria-label="Delete session"
                 >

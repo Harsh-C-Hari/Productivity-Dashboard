@@ -118,7 +118,7 @@ export function ProjectForm({ initial, onSubmit, onCancel, submitting }: Project
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Status</Label>
           <Select value={status} onValueChange={(v) => setStatus(v as ProjectStatus)}>
@@ -171,7 +171,7 @@ export function ProjectForm({ initial, onSubmit, onCancel, submitting }: Project
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>

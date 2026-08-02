@@ -95,35 +95,37 @@ export function InvitationDetailsDialog({
                 </div>
               )}
             </div>
+            
+            {canResend && (
+              <>
+                <Separator className="my-4" />
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-foreground">Invite link</span>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 truncate rounded-lg border border-white/10 bg-base-900/60 px-3 py-2 text-xs">
+                        {window.location.origin}/invite/••••••••••
+                      </code>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(`${window.location.origin}/invite/${invitation.token}`);
+                          toast("Invite link copied", "success");
+                        }}
+                      >
+                        <Link2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
 
-            <Separator className="my-4" />
-
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground">Invite link</span>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 truncate rounded-lg border border-white/10 bg-base-900/60 px-3 py-2 text-xs">
-                    {window.location.origin}/invite/••••••••••
-                  </code>
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(`${window.location.origin}/invite/${invitation.token}`);
-                      toast("Invite link copied", "success");
-                    }}
-                  >
-                    <Link2 className="h-4 w-4" />
+                  <Button variant="outline" className="w-full" onClick={onResend} disabled={resending}>
+                    <RotateCw className="h-4 w-4" /> {resending ? "Resending…" : "Resend invitation"}
                   </Button>
                 </div>
-              </div>
-
-              {canResend && (
-                <Button variant="outline" className="w-full" onClick={onResend} disabled={resending}>
-                  <RotateCw className="h-4 w-4" /> {resending ? "Resending…" : "Resend invitation"}
-                </Button>
-              )}
-            </div>
+              </>
+            )}
           </>
         )}
       </DialogContent>

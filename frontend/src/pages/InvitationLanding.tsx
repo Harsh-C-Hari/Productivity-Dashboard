@@ -60,7 +60,7 @@ export default function InvitationLanding() {
   });
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-base-950 px-4 py-10">
+    <div className="min-h-dvh flex items-center justify-center bg-base-950 px-4 py-10">
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}

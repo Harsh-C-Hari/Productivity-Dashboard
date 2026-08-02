@@ -150,9 +150,9 @@ function ProfileInfoCard() {
               className="hidden"
               onChange={handlePickPhoto}
             />
-            <div className="flex-1 flex flex-col gap-1.5">
-              <Label htmlFor="avatar_url">Avatar URL</Label>
-              {avatarUrl.startsWith("data:") ? (
+            <div className="min-w-0 flex-1 flex flex-col gap-1.5">
+              <Label>Profile photo</Label>
+              {avatarUrl !== (user?.avatar_url ?? "") ? (
                 <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-base-900/40 px-3 py-2 text-sm text-muted-foreground">
                   <span className="flex-1 truncate">Photo selected from your device</span>
                   <button
@@ -164,12 +164,9 @@ function ProfileInfoCard() {
                   </button>
                 </div>
               ) : (
-                <Input
-                  id="avatar_url"
-                  value={avatarUrl}
-                  onChange={(e) => setAvatarUrl(e.target.value)}
-                  placeholder="https://… or tap your photo to upload"
-                />
+                <p className="text-sm text-muted-foreground">
+                  Tap the icon to {avatarUrl ? "change" : "choose"} a photo from your device.
+                </p>
               )}
             </div>
           </div>

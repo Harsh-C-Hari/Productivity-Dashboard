@@ -45,10 +45,12 @@ export function WeeklyTimetable() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-        {DAYS.map((d) => (
-          <div key={d.value} className="glass-card h-64 animate-pulse bg-white/[0.02]" />
-        ))}
+      <div className="overflow-x-auto scrollbar-thin -mx-1 px-1">
+        <div className="grid grid-cols-[repeat(7,minmax(168px,1fr))] lg:grid-cols-7 gap-3 min-w-[1176px] lg:min-w-0">
+          {DAYS.map((d) => (
+            <div key={d.value} className="glass-card h-64 animate-pulse bg-white/[0.02]" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -72,7 +74,7 @@ export function WeeklyTimetable() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 text-muted-foreground hover:text-primary"
+                  className="h-8 w-8 text-muted-foreground hover:text-primary"
                   onClick={() => setAddDialogDay(day.value)}
                   aria-label={`Add class on ${day.label}`}
                 >

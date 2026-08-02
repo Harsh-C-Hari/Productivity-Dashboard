@@ -97,7 +97,7 @@ export function TodoForm({ projectId, mode, initial, onSubmit, onCancel, submitt
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Phase</Label>
           <Select value={phaseId} onValueChange={setPhaseId}>
@@ -132,7 +132,7 @@ export function TodoForm({ projectId, mode, initial, onSubmit, onCancel, submitt
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="todo-effort">Estimated effort (hrs)</Label>
           <Input
@@ -156,7 +156,7 @@ export function TodoForm({ projectId, mode, initial, onSubmit, onCancel, submitt
       </div>
 
       {mode === "edit" && (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
             <Label>Status</Label>
             <Select value={status} onValueChange={(v) => setStatus(v as TaskStatus)}>
@@ -193,7 +193,7 @@ export function TodoForm({ projectId, mode, initial, onSubmit, onCancel, submitt
         <UrgencyBadge urgency={previewUrgency} />
       </div>
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>

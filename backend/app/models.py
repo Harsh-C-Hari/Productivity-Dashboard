@@ -965,7 +965,7 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False, index=True)
     display_name = Column(String(150), default="")
     email = Column(String(255), unique=True, nullable=False, index=True)
-    avatar_url = Column(String(500), default="")
+    avatar_url = Column(Text, default="")
     timezone = Column(String(60), default="UTC")
     locale = Column(String(10), default="en")
     theme = Column(String(20), default="dark")  # matches the app's default dark/glassmorphism theme

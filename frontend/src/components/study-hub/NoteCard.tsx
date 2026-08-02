@@ -59,10 +59,10 @@ export function NoteCard({ note, hideSubject = false }: { note: Note; hideSubjec
               <span className="opacity-50">{formatDistanceToNowStrict(new Date(note.updated_at), { addSuffix: true })}</span>
             </div>
             <div
-              className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
               onClick={(e) => e.stopPropagation()}
             >
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditOpen(true)} aria-label="Edit note">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditOpen(true)} aria-label="Edit note">
                 <Pencil className="h-3 w-3" />
               </Button>
               <Button
@@ -91,7 +91,7 @@ export function NoteCard({ note, hideSubject = false }: { note: Note; hideSubjec
             className="text-sm scrollbar-thin overflow-y-auto max-h-[50vh]"
             dangerouslySetInnerHTML={{ __html: renderMarkdownLite(note.content) }}
           />
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-4">
             <Button
               variant="secondary"
               onClick={() => {
@@ -127,7 +127,7 @@ export function NoteCard({ note, hideSubject = false }: { note: Note; hideSubjec
             <DialogTitle>Delete "{note.title}"?</DialogTitle>
             <DialogDescription>This can't be undone.</DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
               Cancel
             </Button>

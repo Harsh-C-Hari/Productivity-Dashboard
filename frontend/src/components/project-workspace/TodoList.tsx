@@ -66,7 +66,7 @@ export function TodoList({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-center sm:justify-between">
         <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
           <TabsList>
             <TabsTrigger value="active">Active</TabsTrigger>
@@ -77,7 +77,7 @@ export function TodoList({ projectId }: { projectId: string }) {
           </TabsList>
         </Tabs>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <div className="relative flex-1 sm:w-56">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input

@@ -32,7 +32,8 @@ const AlertDialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2",
-        "glass-panel rounded-2xl p-6 shadow-glass",
+        "glass-panel rounded-2xl p-4 sm:p-6 shadow-glass",
+        "max-h-[88svh] overflow-y-auto scrollbar-thin",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
         className
       )}

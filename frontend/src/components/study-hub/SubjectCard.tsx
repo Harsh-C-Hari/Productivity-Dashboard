@@ -87,7 +87,7 @@ export function SubjectCard({ subject, progress }: SubjectCardProps) {
             >
               Open subject →
             </Link>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditOpen(true)} aria-label="Edit subject">
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
@@ -128,7 +128,7 @@ export function SubjectCard({ subject, progress }: SubjectCardProps) {
               This also deletes every assignment, note, and resource in this subject, and can't be undone.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
               Cancel
             </Button>

@@ -92,7 +92,7 @@ export function ProjectResourceForm({ projectId, onDone }: ProjectResourceFormPr
         />
       </div>
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onDone}>
           Cancel
         </Button>

@@ -233,7 +233,7 @@ function ConversationDetail({ id, onBack }: { id: string; onBack: () => void }) 
             <DialogTitle>Delete "{conversation.title}"?</DialogTitle>
             <DialogDescription>This can't be undone.</DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
             <Button
               variant="destructive"
@@ -351,7 +351,7 @@ function ConversationForm({ initial, onDone }: { initial?: Conversation; onDone:
         </Select>
       </div>
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onDone}>Cancel</Button>
         <Button type="submit" disabled={submitting || !title.trim() || !aiAccountId}>
           {initial ? "Save changes" : "Start conversation"}

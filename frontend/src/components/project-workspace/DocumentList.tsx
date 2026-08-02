@@ -115,7 +115,7 @@ export function DocumentList({ projectId }: { projectId: string }) {
         ) : (
           <div className="flex flex-col h-full">
             <div className="flex items-start justify-between gap-3 mb-4">
-              <h3 className="font-display text-lg font-semibold">{active.title}</h3>
+              <h3 className="min-w-0 font-display text-lg font-semibold break-words">{active.title}</h3>
               <div className="flex items-center gap-1 shrink-0">
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(true)} aria-label="Edit document">
                   <Pencil className="h-3.5 w-3.5" />
@@ -149,7 +149,7 @@ export function DocumentList({ projectId }: { projectId: string }) {
             <DialogTitle>Delete "{confirmDelete?.title}"?</DialogTitle>
             <DialogDescription>This can't be undone.</DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end mt-4">
             <Button variant="ghost" onClick={() => setConfirmDelete(null)}>
               Cancel
             </Button>
@@ -216,7 +216,7 @@ function DocEditor({
         />
       )}
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>

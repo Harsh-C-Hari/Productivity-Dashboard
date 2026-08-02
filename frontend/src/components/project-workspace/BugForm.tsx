@@ -77,7 +77,7 @@ export function BugForm({ projectId, initial, onSubmit, onCancel, submitting }: 
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Severity</Label>
           <Select value={severity} onValueChange={(v) => setSeverity(v as BugSeverity)}>
@@ -110,7 +110,7 @@ export function BugForm({ projectId, initial, onSubmit, onCancel, submitting }: 
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Phase</Label>
           <Select value={phaseId} onValueChange={setPhaseId}>
@@ -158,7 +158,7 @@ export function BugForm({ projectId, initial, onSubmit, onCancel, submitting }: 
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1">
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
