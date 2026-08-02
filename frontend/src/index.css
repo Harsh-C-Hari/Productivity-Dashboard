@@ -93,6 +93,20 @@
     background: rgba(217, 167, 91, 0.75);
   }
 
+  /* On touch devices, hide the custom scrollbar entirely instead of
+     shrinking it — mobile browsers render scrollbars as an overlay that
+     isn't clipped to the rounded container, which is what caused the
+     bar to poke out at the start/end. Touch scrolling doesn't need a
+     visible track anyway. */
+  @media (pointer: coarse) {
+    .scrollbar-thin {
+      scrollbar-width: none;
+    }
+    .scrollbar-thin::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
   .no-scrollbar {
     scrollbar-width: none;
     -ms-overflow-style: none;
