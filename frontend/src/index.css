@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root.dark {
+    --background: 240 3% 5%;
+    --foreground: 40 20% 92%;
+    --card: 240 3% 8%;
+    --card-foreground: 40 20% 92%;
+    --popover: 240 3% 7%;
+    --popover-foreground: 40 20% 92%;
+    --border: 240 3% 17%;
+    --input: 240 3% 17%;
+    --ring: 38 55% 62%;
+    --radius: 0.9rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-base-950 text-foreground;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight;
+  }
+
+  ::selection {
+    background: rgba(217, 167, 91, 0.35);
+  }
+
+  /* Visible keyboard focus everywhere, respecting the theme */
+  :focus-visible {
+    outline: 2px solid #D9A75B;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Core flat surface used across cards, panels, and modals.
+     Hairline border + solid neutral fill — no blur, no glass. */
+  .glass-panel {
+    @apply bg-base-900 border border-white/[0.08];
+  }
+
+  .glass-card {
+    @apply glass-panel rounded-2xl transition-colors duration-200;
+  }
+
+  .glass-card:hover {
+    @apply border-primary/30;
+  }
+
+  .aurora-text {
+    @apply bg-aurora bg-clip-text text-transparent;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(217, 167, 91, 0.35) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(217, 167, 91, 0.35);
+    border-radius: 999px;
+  }
+}

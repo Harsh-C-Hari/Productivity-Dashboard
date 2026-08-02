@@ -1,0 +1,41 @@
+# --- Python / backend ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+venv/
+.venv/
+env/
+*.db
+*.sqlite
+*.sqlite3
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# --- Node / frontend ---
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+*.tsbuildinfo
+# tsconfig.node.json compiles vite.config.ts on save in some editors/IDEs,
+# emitting these next to the source file -- never commit the emitted output.
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# --- Env / secrets ---
+.env
+.env.local
+.env.*.local
+
+# --- Editor / OS ---
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.swp
+
+# --- Logs ---
+*.log
+npm-debug.log*
