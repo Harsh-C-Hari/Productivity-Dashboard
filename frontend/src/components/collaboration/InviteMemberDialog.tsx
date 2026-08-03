@@ -93,8 +93,8 @@ export function InviteMemberDialog({ projectId, open, onOpenChange }: InviteMemb
                 <CheckCircle2 className="h-4 w-4 text-urgency-low" /> Invitation sent
               </DialogTitle>
               <DialogDescription>
-                {created.email} will see this in their notifications if they already have an account. Otherwise,
-                share the link below directly -- there's no email delivery in this app.
+                {created.email} will see this in their notifications. You can also share the link below directly --
+                there's no email delivery in this app.
               </DialogDescription>
             </DialogHeader>
 
@@ -138,20 +138,21 @@ export function InviteMemberDialog({ projectId, open, onOpenChange }: InviteMemb
                 <Mail className="h-4 w-4 text-primary" /> Invite a member
               </DialogTitle>
               <DialogDescription>
-                If they already have an account, they'll get an in-app notification. Either way, you'll get a
-                shareable link to send them once this is created -- no email is sent automatically.
+                They must already have an account -- enter their registered email or username. They'll get an
+                in-app notification, and you'll get a shareable link to send them too -- no email is sent
+                automatically.
               </DialogDescription>
             </DialogHeader>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invite-email">Email address</Label>
+                <Label htmlFor="invite-email">Email or username</Label>
                 <Input
                   id="invite-email"
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="teammate@example.com"
+                  placeholder="teammate@example.com or username"
                   autoFocus
                   required
                 />

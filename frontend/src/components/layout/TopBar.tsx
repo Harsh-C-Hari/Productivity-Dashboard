@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, NavLink } from "react-router-dom";
-import { Bell, BellOff, BellRing } from "lucide-react";
+import { Bell, BellOff, BellRing, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNotifications } from "@/context/NotificationContext";
 import { useAuth } from "@/context/AuthContext";
@@ -38,7 +38,7 @@ function resolveTitleMeta(pathname: string) {
 export function TopBar() {
   const { pathname } = useLocation();
   const { permission, requestPermission } = useNotifications();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { data: counts } = useNotificationCounts();
   const [now, setNow] = useState(new Date());
   const meta = resolveTitleMeta(pathname);
@@ -112,6 +112,16 @@ export function TopBar() {
               </span>
             )}
           </NavLink>
+        )}
+
+        {user && (
+          <button
+            onClick={() => void logout()}
+            title="Sign out"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 text-muted-foreground transition-colors hover:bg-urgency-critical/10 hover:text-urgency-critical md:hidden"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         )}
       </div>
     </header>

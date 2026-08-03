@@ -3,6 +3,9 @@ export default {
   darkMode: "class",
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
+    screens: {
+      md: '900px',
+    },
     extend: {
       fontFamily: {
         display: ["'Space Grotesk'", "sans-serif"],

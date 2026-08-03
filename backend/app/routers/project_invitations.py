@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -102,13 +103,23 @@ def create_invitation(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_permission("invite_members")),
 ):
-    """Create invitation. Validates: the project exists, the assigned
-    role (if any) exists, the email isn't already an active member of
-    this project, and there isn't already a pending invitation for the
-    same (project, email) pair. `invited_by_user_id` is always the
-    authenticated caller, regardless of what the request body sends --
-    one member should never be able to attribute an invitation to
-    someone else."""
+    """Create invitation. `payload.email` is actually an "email or
+    username" identifier: it must resolve to a User already registered
+    in the database (matched against either `User.email` or
+    `User.username`) -- invitations can no longer be created for an
+    address/handle that has no matching account. Once resolved, the
+    invitation is always stored keyed by that user's real *email*
+    (regardless of which form the caller typed), so every downstream
+    consumer of `ProjectInvitation.email` (duplicate checks,
+    notifications, accept-by-token) keeps working unchanged.
+
+    Validates: the project exists, the assigned role (if any) exists,
+    the identifier resolves to a registered user, that user isn't
+    already an active member of this project, and there isn't already
+    a pending invitation for the same (project, email) pair.
+    `invited_by_user_id` is always the authenticated caller, regardless
+    of what the request body sends -- one member should never be able
+    to attribute an invitation to someone else."""
     project = get_project_or_404(db, project_id)
 
     if not collaboration_allowed(project):
@@ -120,17 +131,29 @@ def create_invitation(
     if payload.role_id and not db.query(models.Role).filter(models.Role.id == payload.role_id).first():
         raise HTTPException(status_code=404, detail="Role not found")
 
-    existing_user = db.query(models.User).filter(models.User.email == payload.email).first()
-    if existing_user:
-        membership = get_membership(db, project_id, existing_user.id)
-        if membership and membership.status == models.MemberStatus.active:
-            raise HTTPException(status_code=409, detail=f'"{payload.email}" is already a member of this project')
+    identifier = payload.email.strip()
+    existing_user = (
+        db.query(models.User)
+        .filter(or_(models.User.email == identifier, models.User.username == identifier))
+        .first()
+    )
+    if not existing_user:
+        raise HTTPException(
+            status_code=404,
+            detail=f'No registered user found with email or username "{identifier}". Invitations can only be sent to existing accounts.',
+        )
+
+    invite_email = existing_user.email
+
+    membership = get_membership(db, project_id, existing_user.id)
+    if membership and membership.status == models.MemberStatus.active:
+        raise HTTPException(status_code=409, detail=f'"{invite_email}" is already a member of this project')
 
     duplicate = (
         db.query(models.ProjectInvitation)
         .filter(
             models.ProjectInvitation.project_id == project_id,
-            models.ProjectInvitation.email == payload.email,
+            models.ProjectInvitation.email == invite_email,
             models.ProjectInvitation.status == models.InvitationStatus.pending,
         )
         .first()
@@ -138,11 +161,11 @@ def create_invitation(
     if duplicate:
         duplicate = _resolve_expiry(db, duplicate)
         if duplicate.status == models.InvitationStatus.pending:
-            raise HTTPException(status_code=409, detail=f'A pending invitation already exists for "{payload.email}"')
+            raise HTTPException(status_code=409, detail=f'A pending invitation already exists for "{invite_email}"')
 
     invitation = models.ProjectInvitation(
         project_id=project_id,
-        email=payload.email,
+        email=invite_email,
         role_id=payload.role_id,
         invited_by_user_id=current_user.id,
         token=secrets.token_urlsafe(32),
@@ -154,7 +177,7 @@ def create_invitation(
 
     log_activity_event(
         db,
-        f'Invited {payload.email} to project "{project.name}"',
+        f'Invited {invite_email} to project "{project.name}"',
         icon="mail-plus",
         user_id=current_user.id,
         project_id=project_id,
@@ -163,22 +186,22 @@ def create_invitation(
         entity_id=invitation.id,
     )
 
-    # In-app invitation: if the invited email already belongs to a User
-    # account, they get a real in-app Notification (with Accept/Reject
-    # actions) immediately -- no email required, per the task brief's
-    # "Complete this system WITHOUT SMTP" / "In-App Invitations".
-    if existing_user:
-        inviter_name = current_user.display_name or current_user.username
-        create_notification(
-            db,
-            user_id=existing_user.id,
-            category=models.NotificationCategory.project_invitation,
-            title=f'{inviter_name} invited you to join "{project.name}"',
-            message=f"Role: {invitation.role.name if invitation.role else 'Member'}",
-            project_id=project_id,
-            invitation_id=invitation.id,
-            action_url=f"/invite/{invitation.token}",
-        )
+    # existing_user is guaranteed here (the identifier must resolve to a
+    # registered account), so the invitee always gets a real in-app
+    # Notification (with Accept/Reject actions) immediately -- no email
+    # required, per the task brief's "Complete this system WITHOUT
+    # SMTP" / "In-App Invitations".
+    inviter_name = current_user.display_name or current_user.username
+    create_notification(
+        db,
+        user_id=existing_user.id,
+        category=models.NotificationCategory.project_invitation,
+        title=f'{inviter_name} invited you to join "{project.name}"',
+        message=f"Role: {invitation.role.name if invitation.role else 'Member'}",
+        project_id=project_id,
+        invitation_id=invitation.id,
+        action_url=f"/invite/{invitation.token}",
+    )
 
     return serialize_invitation(invitation)
 

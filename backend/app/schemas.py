@@ -1548,6 +1548,11 @@ class ProjectInvitationBase(BaseModel):
 
 
 class ProjectInvitationCreate(ProjectInvitationBase):
+    """`email` here is actually an "email or username" identifier: the
+    router resolves it against `User.email` OR `User.username` and
+    rejects the request (404) if neither matches a registered account.
+    The stored `ProjectInvitation.email` is always the resolved user's
+    real email, never the raw identifier the caller typed."""
     pass
 
 
