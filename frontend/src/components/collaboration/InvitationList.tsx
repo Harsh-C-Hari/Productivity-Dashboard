@@ -8,9 +8,11 @@ import { InvitationDetailsDialog } from "./InvitationDetailsDialog";
 import { InviteMemberDialog } from "./InviteMemberDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useProjectInvitations, useCancelProjectInvitation, useResendProjectInvitation } from "@/hooks/useProjectInvitations";
+import { useProject } from "@/hooks/useProjects";
 import { useRoles } from "@/hooks/useRoles";
 import { useUsers } from "@/hooks/useUsers";
 import { useCurrentMembership } from "@/hooks/useProjectMembers";
+import { collaborationAllowed } from "@/lib/collaborationMeta";
 import type { InvitationStatus, ProjectInvitation } from "@/types/collaboration";
 
 const TABS: { value: InvitationStatus | "all"; label: string }[] = [
@@ -33,6 +35,7 @@ export function InvitationList({ projectId }: InvitationListProps) {
   const [cancelTarget, setCancelTarget] = useState<ProjectInvitation | null>(null);
 
   const { data: invitations, isLoading, isError } = useProjectInvitations(projectId);
+  const { data: project } = useProject(projectId);
   const { data: roles } = useRoles({ projectId, includeGlobal: true });
   const { data: users } = useUsers({ limit: 200 });
   const { isAdmin, hasPermission } = useCurrentMembership(projectId);
@@ -40,6 +43,7 @@ export function InvitationList({ projectId }: InvitationListProps) {
   const resendInvitation = useResendProjectInvitation(projectId);
 
   const canManage = isAdmin || hasPermission("invite_members");
+  const canInvite = canManage && !!project && collaborationAllowed(project);
   const roleMap = useMemo(() => new Map((roles ?? []).map((r) => [r.id, r])), [roles]);
   const userMap = useMemo(() => new Map((users ?? []).map((u) => [u.id, u])), [users]);
 
@@ -82,7 +86,7 @@ export function InvitationList({ projectId }: InvitationListProps) {
             ))}
           </TabsList>
         </Tabs>
-        {canManage && (
+        {canInvite && (
           <Button onClick={() => setInviteOpen(true)}>
             <UserPlus className="h-4 w-4" /> Invite
           </Button>

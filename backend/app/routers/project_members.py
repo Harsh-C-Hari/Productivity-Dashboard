@@ -18,7 +18,7 @@ from .. import models, schemas
 from ..activity_log import log_activity, log_activity_event
 from ..auth_dependencies import get_current_user, require_membership, require_owner, require_permission
 from ..notification_helpers import create_notification
-from ..project_helpers import count_active_owners, get_membership, is_admin
+from ..project_helpers import collaboration_allowed, count_active_owners, get_membership, is_admin
 from .projects import get_project_or_404
 
 router = APIRouter(prefix="/api/projects/{project_id}/members", tags=["project-members"])
@@ -144,6 +144,12 @@ def add_member(
     comes to exist without an auth system)."""
     project = get_project_or_404(db, project_id)
 
+    if not collaboration_allowed(project):
+        raise HTTPException(
+            status_code=409,
+            detail="This project is personal and collaboration is off. Enable collaboration in project settings before adding members.",
+        )
+
     user = db.query(models.User).filter(models.User.id == payload.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -191,14 +197,14 @@ def update_member(
     member_id: str,
     payload: schemas.ProjectMemberUpdate,
     db: Session = Depends(get_db),
-    _current_user: models.User = Depends(require_permission("manage_members")),
+    current_user: models.User = Depends(require_permission("manage_members")),
 ):
     """Update member role and/or status (and permission_overrides) in
     one endpoint, mirroring the rest of the app's `PATCH` convention.
     Blocks any change that would leave the project with zero active
     Owners (demoting the last Owner's role, or suspending/removing
     them) -- use `transfer-ownership` first instead."""
-    get_project_or_404(db, project_id)
+    project = get_project_or_404(db, project_id)
     member = get_member_or_404(db, project_id, member_id)
     data = payload.model_dump(exclude_unset=True)
 
@@ -215,7 +221,10 @@ def update_member(
             )
 
     if "role_id" in data and data["role_id"]:
-        _get_role_or_404(db, data["role_id"])
+        new_role = _get_role_or_404(db, data["role_id"])
+    else:
+        new_role = None
+    role_changed = "role_id" in data and data["role_id"] != member.role_id
 
     if "permission_overrides" in data:
         member.permission_overrides = json.dumps(data.pop("permission_overrides") or [])
@@ -226,6 +235,42 @@ def update_member(
     db.commit()
     db.refresh(member)
     log_activity(db, "Updated project member", icon="user-cog")
+
+    if role_changed:
+        role_label = new_role.name if new_role else "no role"
+        # Notify the member whose role changed (skip if they changed
+        # their own role -- they already know) and the project owner,
+        # who should hear about every role change in their project --
+        # including ones they made themselves (worded as a confirmation
+        # in that case) -- except when they're the member being changed
+        # (that's already covered by the block above).
+        if member.user_id != current_user.id:
+            create_notification(
+                db,
+                user_id=member.user_id,
+                category=models.NotificationCategory.role_changed,
+                title=f'Your role in "{project.name}" was changed to {role_label}',
+                project_id=project_id,
+                action_url=f"/projects/{project_id}",
+            )
+        if project.owner_id and project.owner_id != member.user_id:
+            changed_user = db.query(models.User).filter(models.User.id == member.user_id).first()
+            changed_name = changed_user.display_name or changed_user.username if changed_user else "A member"
+            owner_made_change = project.owner_id == current_user.id
+            title = (
+                f'You changed {changed_name}\'s role in "{project.name}" to {role_label}'
+                if owner_made_change
+                else f'{changed_name}\'s role in "{project.name}" was changed to {role_label}'
+            )
+            create_notification(
+                db,
+                user_id=project.owner_id,
+                category=models.NotificationCategory.role_changed,
+                title=title,
+                project_id=project_id,
+                action_url=f"/projects/{project_id}",
+            )
+
     return serialize_member(member)
 
 
@@ -234,7 +279,7 @@ def remove_member(
     project_id: str,
     member_id: str,
     db: Session = Depends(get_db),
-    _current_user: models.User = Depends(require_permission("manage_members")),
+    current_user: models.User = Depends(require_permission("manage_members")),
 ):
     """Remove member. Blocked if the member is the project's last
     active Owner -- transfer ownership to someone else first."""
@@ -274,6 +319,26 @@ def remove_member(
         title=f'You were removed from "{project.name}"',
         action_url="/projects",
     )
+    if project.owner_id and project.owner_id != user_id:
+        # Same "owner should hear about every membership change in their
+        # project" reasoning as role_changed above -- including changes
+        # they made themselves (worded as a confirmation in that case).
+        removed_user = db.query(models.User).filter(models.User.id == user_id).first()
+        removed_name = removed_user.display_name or removed_user.username if removed_user else "A member"
+        owner_made_change = project.owner_id == current_user.id
+        title = (
+            f'You removed {removed_name} from "{project.name}"'
+            if owner_made_change
+            else f'{removed_name} was removed from "{project.name}"'
+        )
+        create_notification(
+            db,
+            user_id=project.owner_id,
+            category=models.NotificationCategory.project_access_revoked,
+            title=title,
+            project_id=project_id,
+            action_url=f"/projects/{project_id}",
+        )
     return None
 
 

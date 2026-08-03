@@ -379,7 +379,7 @@ def update_project(project_id: str, payload: schemas.ProjectUpdate, current_user
     for field, value in data.items():
         setattr(project, field, value)
 
-    project.updated_at = __import__("datetime").utc_now()
+    project.updated_at = utc_now()
     db.commit()
     db.refresh(project)
 

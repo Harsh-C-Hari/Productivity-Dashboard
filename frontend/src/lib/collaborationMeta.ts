@@ -59,6 +59,18 @@ export function initialsOf(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+/** Mirrors backend/app/project_helpers.py's `collaboration_allowed()`
+ * exactly: a `personal` project with `collaboration_enabled` off can't
+ * take on collaborators. Every "Invite"/"Add member" entry point in the
+ * UI (the header's Quick invite button, and the Team tab's Members and
+ * Invitations panels) should check this and hide itself rather than let
+ * the user hit send only to get a 409 back -- the backend still enforces
+ * this regardless, this is purely so the UI doesn't offer an action it
+ * knows will be rejected. */
+export function collaborationAllowed(project: { project_type: ProjectType; collaboration_enabled: boolean }): boolean {
+  return project.project_type !== "personal" || project.collaboration_enabled;
+}
+
 /** Deterministic permission-group label from a permission's `category`
  * (e.g. "members" -> "Members"), used by the Permission Viewer/Matrix to
  * group the flat Permission[] catalog without a second backend concept. */

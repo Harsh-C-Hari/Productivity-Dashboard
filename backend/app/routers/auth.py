@@ -292,7 +292,7 @@ def update_profile(
 
     log_activity_event(
         db,
-        f"{current_user.display_name or current_user.username} updated their profile",
+        f"{current_user.display_name or current_user.username} updated profile",
         icon="user-cog",
         user_id=current_user.id,
         action="profile_updated",

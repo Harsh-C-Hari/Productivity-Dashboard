@@ -20,7 +20,7 @@ import { useRoles } from "@/hooks/useRoles";
 import { useUsers } from "@/hooks/useUsers";
 import { useAuth } from "@/context/AuthContext";
 import { useProject } from "@/hooks/useProjects";
-import { MEMBER_STATUS_OPTIONS } from "@/lib/collaborationMeta";
+import { MEMBER_STATUS_OPTIONS, collaborationAllowed } from "@/lib/collaborationMeta";
 import type { MemberStatus, ProjectMemberWithUser } from "@/types/collaboration";
 
 const PAGE_SIZE = 10;
@@ -80,6 +80,7 @@ export function MemberList({ projectId }: MemberListProps) {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const canManage = isAdmin || hasPermission("manage_members");
+  const canInvite = canManage && !!project && collaborationAllowed(project);
   const assignableRoles = (roles ?? []).filter((r) => r.name !== "Owner");
 
   if (isLoading) {
@@ -154,7 +155,7 @@ export function MemberList({ projectId }: MemberListProps) {
               ))}
             </SelectContent>
           </Select>
-          {canManage && (
+          {canInvite && (
             <Button className="w-full sm:w-auto" onClick={() => setInviteOpen(true)}>
               <UserPlus className="h-4 w-4" /> Invite
             </Button>

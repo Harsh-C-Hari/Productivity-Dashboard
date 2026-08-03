@@ -25,7 +25,7 @@ import { useProjectCollaborationSummary, useCurrentMembership } from "@/hooks/us
 import { useUser } from "@/hooks/useUsers";
 import { subjectColorHex, SUBJECT_COLOR_CLASSES } from "@/lib/subjectColors";
 import { PROJECT_STATUS_META } from "@/lib/projectMeta";
-import { VISIBILITY_META, PROJECT_TYPE_META } from "@/lib/collaborationMeta";
+import { VISIBILITY_META, PROJECT_TYPE_META, collaborationAllowed } from "@/lib/collaborationMeta";
 
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -137,7 +137,7 @@ export default function ProjectDetail() {
               {collabSummary.pending_invitation_count === 1 ? "" : "s"}
             </Badge>
           )}
-          {project.collaboration_enabled && (
+          {collaborationAllowed(project) && (
             <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setQuickInviteOpen(true)}>
               <UserPlus className="h-3.5 w-3.5" /> Quick invite
             </Button>

@@ -25,7 +25,7 @@ from .. import models, schemas
 from ..activity_log import log_activity_event
 from ..auth_dependencies import require_membership, require_permission
 from ..notification_helpers import create_notification, delete_stale_invitation_notifications
-from ..project_helpers import get_membership, get_or_create_user_by_email
+from ..project_helpers import collaboration_allowed, get_membership, get_or_create_user_by_email
 from .projects import get_project_or_404
 
 router = APIRouter(prefix="/api/projects/{project_id}/invitations", tags=["project-invitations"])
@@ -110,6 +110,12 @@ def create_invitation(
     one member should never be able to attribute an invitation to
     someone else."""
     project = get_project_or_404(db, project_id)
+
+    if not collaboration_allowed(project):
+        raise HTTPException(
+            status_code=409,
+            detail="This project is personal and collaboration is off. Enable collaboration in project settings before inviting members.",
+        )
 
     if payload.role_id and not db.query(models.Role).filter(models.Role.id == payload.role_id).first():
         raise HTTPException(status_code=404, detail="Role not found")

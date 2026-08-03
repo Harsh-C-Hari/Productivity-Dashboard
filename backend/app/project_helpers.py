@@ -146,6 +146,23 @@ def can_manage_project(db: Session, project_id: str, user_id: str) -> bool:
     return has_permission(db, project_id, user_id, "manage_project")
 
 
+def collaboration_allowed(project: models.Project) -> bool:
+    """Whether this project can take on new collaborators at all. A
+    `personal` project with `collaboration_enabled` off is meant to stay
+    single-user -- inviting or directly adding someone to it would give
+    them access to a project its owner never opted into sharing.
+    Non-personal project types (hackathon, startup, etc.) are
+    collaborative by nature and aren't gated by this flag; it only
+    applies to the `personal` type, which defaults to both
+    `collaboration_enabled=False` and this check being the deciding
+    factor. Kept as a plain function (no HTTPException here) so both
+    `routers/project_invitations.py` (create_invitation) and
+    `routers/project_members.py` (add_member) can raise their own
+    endpoint-appropriate error around it, same convention as every other
+    helper in this module."""
+    return project.project_type != models.ProjectType.personal or project.collaboration_enabled
+
+
 def count_active_owners(db: Session, project_id: str) -> int:
     """How many active members currently hold the "Owner" role on this
     project -- used to block removing/demoting the last owner. Counts
