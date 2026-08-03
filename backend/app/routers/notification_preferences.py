@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import models, schemas
+from ..auth_dependencies import get_current_user
 
 router = APIRouter(prefix="/api/users/{user_id}/notification-preferences", tags=["notification-preferences"])
 
@@ -49,15 +50,23 @@ def get_or_create_preferences(db: Session, user_id: str) -> models.NotificationP
     return pref
 
 
+def _require_self(user_id: str, current_user: models.User) -> None:
+    # Same rationale as user_preferences.py's `_require_self`: this
+    # router had no auth dependency at all before this fix.
+    if user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="User not found")
+
+
 @router.get("", response_model=schemas.NotificationPreferenceOut)
-def get_preferences(user_id: str, db: Session = Depends(get_db)):
+def get_preferences(user_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    _require_self(user_id, current_user)
     _get_user_or_404(db, user_id)
     return serialize_preferences(get_or_create_preferences(db, user_id))
 
 
 @router.patch("", response_model=schemas.NotificationPreferenceOut)
-def update_preferences(user_id: str, payload: schemas.NotificationPreferenceUpdate, db: Session = Depends(get_db)):
-    _get_user_or_404(db, user_id)
+def update_preferences(user_id: str, payload: schemas.NotificationPreferenceUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    _require_self(user_id, current_user)
     pref = get_or_create_preferences(db, user_id)
     data = payload.model_dump(exclude_unset=True)
 

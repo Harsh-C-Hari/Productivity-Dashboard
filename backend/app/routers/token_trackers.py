@@ -14,6 +14,12 @@ analytics for the usage-log shape that actually exists. A settings-
 style countdown/notify feature would need a small additive migration
 (e.g. new columns on `AIAccount`, or a new `TokenTrackerSettings`
 table) and should be scoped as its own follow-up task.
+
+Personal module: TokenTracker has no user_id of its own -- ownership is
+inherited from its parent AIAccount (`ai_account_id`), same pattern
+`notes.py` uses for Subject. This router previously had NO auth
+dependency at all (not even login-required) -- every endpoint below now
+requires `get_current_user` and scopes to owned AI accounts.
 """
 from typing import List, Optional
 
@@ -23,6 +29,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from .. import models, schemas
 from ..activity_log import log_activity
+from ..auth_dependencies import get_current_user
 
 router = APIRouter(prefix="/api/token-trackers", tags=["ai-workspace"])
 
@@ -31,8 +38,26 @@ def serialize_tracker(tracker: models.TokenTracker) -> schemas.TokenTrackerOut:
     return schemas.TokenTrackerOut.model_validate(tracker)
 
 
-def get_tracker_or_404(db: Session, tracker_id: str) -> models.TokenTracker:
-    tracker = db.query(models.TokenTracker).filter(models.TokenTracker.id == tracker_id).first()
+def _owned_account_ids(db: Session, user_id: str) -> List[str]:
+    return [a.id for a in db.query(models.AIAccount).filter(models.AIAccount.user_id == user_id).all()]
+
+
+def _get_owned_account(db: Session, account_id: str, user_id: str) -> models.AIAccount:
+    account = db.query(models.AIAccount).filter(
+        models.AIAccount.id == account_id, models.AIAccount.user_id == user_id
+    ).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="AI account not found")
+    return account
+
+
+def get_tracker_or_404(db: Session, tracker_id: str, user_id: str) -> models.TokenTracker:
+    tracker = (
+        db.query(models.TokenTracker)
+        .join(models.AIAccount, models.TokenTracker.ai_account_id == models.AIAccount.id)
+        .filter(models.TokenTracker.id == tracker_id, models.AIAccount.user_id == user_id)
+        .first()
+    )
     if not tracker:
         raise HTTPException(status_code=404, detail="Token tracker entry not found")
     return tracker
@@ -45,8 +70,11 @@ def list_token_trackers(
     limit: Optional[int] = Query(default=None, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    query = db.query(models.TokenTracker)
+    query = db.query(models.TokenTracker).join(
+        models.AIAccount, models.TokenTracker.ai_account_id == models.AIAccount.id
+    ).filter(models.AIAccount.user_id == current_user.id)
     if ai_account_id:
         query = query.filter(models.TokenTracker.ai_account_id == ai_account_id)
     if conversation_id:
@@ -58,8 +86,13 @@ def list_token_trackers(
 
 
 @router.get("/summary", response_model=schemas.TokenUsageSummary)
-def get_token_usage_summary(db: Session = Depends(get_db)):
-    rows = db.query(models.TokenTracker).all()
+def get_token_usage_summary(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    rows = (
+        db.query(models.TokenTracker)
+        .join(models.AIAccount, models.TokenTracker.ai_account_id == models.AIAccount.id)
+        .filter(models.AIAccount.user_id == current_user.id)
+        .all()
+    )
     total_input = sum(r.input_tokens or 0 for r in rows)
     total_output = sum(r.output_tokens or 0 for r in rows)
     total_tokens = sum(r.total_tokens or 0 for r in rows)
@@ -88,7 +121,8 @@ def get_token_usage_summary(db: Session = Depends(get_db)):
 
 
 @router.get("/accounts/{account_id}/total", response_model=schemas.TokenTrackerAccountTotal)
-def get_account_token_total(account_id: str, db: Session = Depends(get_db)):
+def get_account_token_total(account_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    _get_owned_account(db, account_id, current_user.id)
     rows = db.query(models.TokenTracker).filter(models.TokenTracker.ai_account_id == account_id).all()
     return schemas.TokenTrackerAccountTotal(
         ai_account_id=account_id,
@@ -98,15 +132,13 @@ def get_account_token_total(account_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{tracker_id}", response_model=schemas.TokenTrackerOut)
-def get_token_tracker(tracker_id: str, db: Session = Depends(get_db)):
-    return serialize_tracker(get_tracker_or_404(db, tracker_id))
+def get_token_tracker(tracker_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return serialize_tracker(get_tracker_or_404(db, tracker_id, current_user.id))
 
 
 @router.post("", response_model=schemas.TokenTrackerOut, status_code=201)
-def record_token_usage(payload: schemas.TokenTrackerCreate, db: Session = Depends(get_db)):
-    account = db.query(models.AIAccount).filter(models.AIAccount.id == payload.ai_account_id).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="AI account not found")
+def record_token_usage(payload: schemas.TokenTrackerCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    _get_owned_account(db, payload.ai_account_id, current_user.id)
 
     data = payload.model_dump()
     if not data.get("total_tokens"):
@@ -119,8 +151,8 @@ def record_token_usage(payload: schemas.TokenTrackerCreate, db: Session = Depend
 
 
 @router.patch("/{tracker_id}", response_model=schemas.TokenTrackerOut)
-def update_token_tracker(tracker_id: str, payload: schemas.TokenTrackerUpdate, db: Session = Depends(get_db)):
-    tracker = get_tracker_or_404(db, tracker_id)
+def update_token_tracker(tracker_id: str, payload: schemas.TokenTrackerUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    tracker = get_tracker_or_404(db, tracker_id, current_user.id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(tracker, field, value)
     db.commit()
@@ -129,8 +161,8 @@ def update_token_tracker(tracker_id: str, payload: schemas.TokenTrackerUpdate, d
 
 
 @router.delete("/{tracker_id}", status_code=204)
-def delete_token_tracker(tracker_id: str, db: Session = Depends(get_db)):
-    tracker = get_tracker_or_404(db, tracker_id)
+def delete_token_tracker(tracker_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    tracker = get_tracker_or_404(db, tracker_id, current_user.id)
     db.delete(tracker)
     db.commit()
     return None
@@ -144,18 +176,14 @@ def delete_token_tracker(tracker_id: str, db: Session = Depends(get_db)):
 # database state. ----
 
 @router.post("/accounts/{account_id}/mark-limited", status_code=204)
-def mark_account_token_limited(account_id: str, db: Session = Depends(get_db)):
-    account = db.query(models.AIAccount).filter(models.AIAccount.id == account_id).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="AI account not found")
-    log_activity(db, f'Token limit reached for "{account.name}"', icon="alert-triangle")
+def mark_account_token_limited(account_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    account = _get_owned_account(db, account_id, current_user.id)
+    log_activity(db, f'Token limit reached for "{account.name}"', icon="alert-triangle", user_id=current_user.id)
     return None
 
 
 @router.post("/accounts/{account_id}/mark-refreshed", status_code=204)
-def mark_account_token_refreshed(account_id: str, db: Session = Depends(get_db)):
-    account = db.query(models.AIAccount).filter(models.AIAccount.id == account_id).first()
-    if not account:
-        raise HTTPException(status_code=404, detail="AI account not found")
-    log_activity(db, f'Token limit refreshed for "{account.name}"', icon="rotate-ccw")
+def mark_account_token_refreshed(account_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    account = _get_owned_account(db, account_id, current_user.id)
+    log_activity(db, f'Token limit refreshed for "{account.name}"', icon="rotate-ccw", user_id=current_user.id)
     return None

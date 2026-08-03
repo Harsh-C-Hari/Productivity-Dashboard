@@ -12,8 +12,14 @@ from sqlalchemy.orm import Session
 from . import models
 
 
-def log_activity(db: Session, message: str, icon: str = "activity"):
-    entry = models.ActivityLog(message=message, icon=icon)
+def log_activity(db: Session, message: str, icon: str = "activity", user_id: Optional[str] = None):
+    """Writes a "Recent Activity" row. `user_id` is optional only for
+    backward source-compatibility with old call sites that predate the
+    data-isolation fix -- every call site in a personal-module router
+    should now pass the current user's id, or the entry becomes
+    invisible to everyone (ActivityLog.user_id is NULL-safe, not
+    NULL-means-global; see routers/dashboard.py and routers/activity.py)."""
+    entry = models.ActivityLog(message=message, icon=icon, user_id=user_id)
     db.add(entry)
     db.commit()
 

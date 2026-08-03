@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from . import models
-from .database import engine, SessionLocal
+from .database import engine, SessionLocal, run_startup_migrations
 from .uploads import UPLOAD_DIR, ensure_upload_dir
 from .routers import (
     tasks,
@@ -55,6 +55,7 @@ from .routers import (
 )
 
 models.Base.metadata.create_all(bind=engine)
+run_startup_migrations()  # adds the data-isolation fix's user_id columns to pre-existing databases
 ensure_upload_dir()
 
 app = FastAPI(title="Productivity Dashboard API", version="1.0.0")

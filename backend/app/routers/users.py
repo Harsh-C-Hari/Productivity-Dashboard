@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import models, schemas
+from ..auth_dependencies import get_current_user
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -66,6 +67,7 @@ def list_users(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
+    _current_user: models.User = Depends(get_current_user),
 ):
     query = db.query(models.User)
     if status:
@@ -80,12 +82,12 @@ def list_users(
 
 
 @router.get("/{user_id}", response_model=schemas.UserOut)
-def get_user(user_id: str, db: Session = Depends(get_db)):
+def get_user(user_id: str, db: Session = Depends(get_db), _current_user: models.User = Depends(get_current_user)):
     return schemas.UserOut.model_validate(get_user_or_404(db, user_id))
 
 
 @router.get("/{user_id}/summary", response_model=schemas.UserSummary)
-def get_user_summary(user_id: str, db: Session = Depends(get_db)):
+def get_user_summary(user_id: str, db: Session = Depends(get_db), _current_user: models.User = Depends(get_current_user)):
     return build_user_summary(db, get_user_or_404(db, user_id))
 
 
@@ -104,7 +106,16 @@ def create_user(payload: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @router.patch("/{user_id}", response_model=schemas.UserOut)
-def update_user(user_id: str, payload: schemas.UserUpdate, db: Session = Depends(get_db)):
+def update_user(user_id: str, payload: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # Self-service only -- this generic directory CRUD previously had no
+    # auth at all, meaning anyone could edit any account (status,
+    # auth_provider, email, ...). `/api/auth/me*` already covers
+    # legitimate profile self-edits; this endpoint is now restricted to
+    # "edit your own row" so it stays usable without becoming an
+    # account-takeover surface. There is no admin role modeled anywhere
+    # else in this app to carve out a broader exception for.
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only update your own account")
     user = get_user_or_404(db, user_id)
     data = payload.model_dump(exclude_unset=True)
 
@@ -126,7 +137,10 @@ def update_user(user_id: str, payload: schemas.UserUpdate, db: Session = Depends
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_user(user_id: str, db: Session = Depends(get_db)):
+def delete_user(user_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # Same self-service-only restriction as update_user above.
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only delete your own account")
     user = get_user_or_404(db, user_id)
     db.delete(user)
     db.commit()

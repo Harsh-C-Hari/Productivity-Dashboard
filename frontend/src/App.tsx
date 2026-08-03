@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
 import { NotificationProvider } from "@/context/NotificationContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { ProtectedRoute, RedirectIfAuthenticated } from "@/components/auth/ProtectedRoute";
@@ -28,16 +29,6 @@ const ForgotPassword = lazy(() => import("@/pages/auth/ForgotPassword"));
 const ResetPassword = lazy(() => import("@/pages/auth/ResetPassword"));
 const VerifyEmail = lazy(() => import("@/pages/auth/VerifyEmail"));
 const InvitationLanding = lazy(() => import("@/pages/InvitationLanding"));
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 15_000,
-      retry: 1,
-      refetchOnWindowFocus: true,
-    },
-  },
-});
 
 function RouteFallback() {
   return (

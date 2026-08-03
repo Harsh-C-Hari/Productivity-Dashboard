@@ -11,6 +11,14 @@ same `ilike` queries the existing scoped search endpoints
 and flattens everything into one small, ranked, navigable list for a
 command-palette-style UI. The scoped endpoints are left untouched and
 still power their own module's in-page search.
+
+Data-isolation fix: every result type here is scoped to what the
+current user can actually see -- Task/AIAccount/PromptTemplate by
+`user_id`, Subject/Assignment/Note by their owning Subject's
+`user_id`, and Conversation/KnowledgeArticle/AIHandoff by (owned via
+their AI Workspace parent) OR (attached to an accessible project). The
+previous version's comment claiming these were "personal/global data"
+visible to everyone was the leak this whole task exists to fix.
 """
 from typing import List
 
@@ -36,17 +44,26 @@ def global_search(
 ):
     like = f"%{q}%"
     results: List[schemas.GlobalSearchItem] = []
-    # Project-scoped result types (todos/features/bugs/milestones/project
-    # zips, plus conversations/handoffs when tied to a project) are
-    # filtered to projects this user can actually see -- everything else
-    # here (Task, Subject, Assignment, Note, AIAccount, PromptTemplate,
-    # unscoped Conversation/KnowledgeArticle/AIHandoff) is personal/global
-    # data, matching the rest of the app's single-user-data routers.
     accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+    owned_subject_ids = [
+        s.id for s in db.query(models.Subject).filter(models.Subject.user_id == current_user.id).all()
+    ]
+    owned_account_ids = [
+        a.id for a in db.query(models.AIAccount).filter(models.AIAccount.user_id == current_user.id).all()
+    ]
+    owned_conversation_ids = [
+        c.id
+        for c in db.query(models.Conversation)
+        .filter(models.Conversation.ai_account_id.in_(owned_account_ids))
+        .all()
+    ]
 
     tasks = (
         db.query(models.Task)
-        .filter((models.Task.title.ilike(like)) | (models.Task.description.ilike(like)))
+        .filter(
+            models.Task.user_id == current_user.id,
+            (models.Task.title.ilike(like)) | (models.Task.description.ilike(like)),
+        )
         .limit(MAX_PER_TYPE)
         .all()
     )
@@ -57,7 +74,10 @@ def global_search(
 
     subjects = (
         db.query(models.Subject)
-        .filter((models.Subject.name.ilike(like)) | (models.Subject.code.ilike(like)))
+        .filter(
+            models.Subject.user_id == current_user.id,
+            (models.Subject.name.ilike(like)) | (models.Subject.code.ilike(like)),
+        )
         .limit(MAX_PER_TYPE)
         .all()
     )
@@ -70,7 +90,10 @@ def global_search(
 
     assignments = (
         db.query(models.Assignment)
-        .filter((models.Assignment.title.ilike(like)) | (models.Assignment.description.ilike(like)))
+        .filter(
+            models.Assignment.subject_id.in_(owned_subject_ids),
+            (models.Assignment.title.ilike(like)) | (models.Assignment.description.ilike(like)),
+        )
         .limit(MAX_PER_TYPE)
         .all()
     )
@@ -85,7 +108,12 @@ def global_search(
         for a in assignments
     ]
 
-    notes = db.query(models.Note).filter(models.Note.title.ilike(like)).limit(MAX_PER_TYPE).all()
+    notes = (
+        db.query(models.Note)
+        .filter(models.Note.subject_id.in_(owned_subject_ids), models.Note.title.ilike(like))
+        .limit(MAX_PER_TYPE)
+        .all()
+    )
     results += [
         schemas.GlobalSearchItem(
             type="note",
@@ -183,7 +211,10 @@ def global_search(
 
     ai_accounts = (
         db.query(models.AIAccount)
-        .filter((models.AIAccount.name.ilike(like)) | (models.AIAccount.description.ilike(like)))
+        .filter(
+            models.AIAccount.user_id == current_user.id,
+            (models.AIAccount.name.ilike(like)) | (models.AIAccount.description.ilike(like)),
+        )
         .limit(MAX_PER_TYPE)
         .all()
     )
@@ -197,7 +228,10 @@ def global_search(
     conversations = (
         db.query(models.Conversation)
         .filter(
-            or_(models.Conversation.project_id.is_(None), models.Conversation.project_id.in_(accessible_project_ids)),
+            or_(
+                models.Conversation.ai_account_id.in_(owned_account_ids),
+                models.Conversation.project_id.in_(accessible_project_ids),
+            ),
             (models.Conversation.title.ilike(like)) | (models.Conversation.summary.ilike(like)),
         )
         .limit(MAX_PER_TYPE)
@@ -216,7 +250,10 @@ def global_search(
 
     prompt_templates = (
         db.query(models.PromptTemplate)
-        .filter((models.PromptTemplate.title.ilike(like)) | (models.PromptTemplate.content.ilike(like)))
+        .filter(
+            models.PromptTemplate.user_id == current_user.id,
+            (models.PromptTemplate.title.ilike(like)) | (models.PromptTemplate.content.ilike(like)),
+        )
         .limit(MAX_PER_TYPE)
         .all()
     )
@@ -234,7 +271,10 @@ def global_search(
     knowledge_articles = (
         db.query(models.KnowledgeArticle)
         .filter(
-            or_(models.KnowledgeArticle.project_id.is_(None), models.KnowledgeArticle.project_id.in_(accessible_project_ids)),
+            or_(
+                models.KnowledgeArticle.user_id == current_user.id,
+                models.KnowledgeArticle.project_id.in_(accessible_project_ids),
+            ),
             (models.KnowledgeArticle.title.ilike(like)) | (models.KnowledgeArticle.content.ilike(like)),
         )
         .limit(MAX_PER_TYPE)
@@ -274,7 +314,11 @@ def global_search(
     ai_handoffs = (
         db.query(models.AIHandoff)
         .filter(
-            or_(models.AIHandoff.project_id.is_(None), models.AIHandoff.project_id.in_(accessible_project_ids)),
+            or_(
+                models.AIHandoff.project_id.in_(accessible_project_ids),
+                models.AIHandoff.ai_account_id.in_(owned_account_ids),
+                models.AIHandoff.conversation_id.in_(owned_conversation_ids),
+            ),
             (models.AIHandoff.completed_work.ilike(like)) | (models.AIHandoff.next_objective.ilike(like)),
         )
         .limit(MAX_PER_TYPE)

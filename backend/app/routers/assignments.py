@@ -5,6 +5,9 @@ urgency injection and file attachment upload/removal.
 Mirrors `routers/tasks.py` closely: every response passes through
 `serialize_assignment`, which computes the current urgency tier on the
 fly using the same Smart Urgency engine Tasks use.
+
+Personal module: Assignment has no user_id of its own -- ownership is
+inherited from its parent Subject, same pattern as notes.py/resources.py.
 """
 import json
 from datetime import datetime
@@ -17,6 +20,7 @@ from ..database import get_db
 from .. import models, schemas
 from ..urgency import compute_urgency
 from ..activity_log import log_activity
+from ..auth_dependencies import get_current_user
 from ..uploads import save_upload, delete_upload
 
 router = APIRouter(prefix="/api/assignments", tags=["study-hub"])
@@ -55,8 +59,29 @@ def serialize_assignment(
     return out
 
 
-def _get_subject_map(db: Session) -> dict:
-    return {s.id: s for s in db.query(models.Subject).all()}
+def _get_subject_map(db: Session, user_id: str) -> dict:
+    return {s.id: s for s in db.query(models.Subject).filter(models.Subject.user_id == user_id).all()}
+
+
+def _get_owned_subject(db: Session, subject_id: str, user_id: str) -> models.Subject:
+    subject = db.query(models.Subject).filter(
+        models.Subject.id == subject_id, models.Subject.user_id == user_id
+    ).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    return subject
+
+
+def _get_owned_assignment(db: Session, assignment_id: str, user_id: str) -> models.Assignment:
+    assignment = (
+        db.query(models.Assignment)
+        .join(models.Subject, models.Assignment.subject_id == models.Subject.id)
+        .filter(models.Assignment.id == assignment_id, models.Subject.user_id == user_id)
+        .first()
+    )
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return assignment
 
 
 @router.get("", response_model=List[schemas.AssignmentOut])
@@ -65,8 +90,11 @@ def list_assignments(
     topic_id: Optional[str] = None,
     status: Optional[models.AssignmentStatus] = None,
     db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    query = db.query(models.Assignment)
+    query = db.query(models.Assignment).join(
+        models.Subject, models.Assignment.subject_id == models.Subject.id
+    ).filter(models.Subject.user_id == current_user.id)
     if subject_id:
         query = query.filter(models.Assignment.subject_id == subject_id)
     if topic_id:
@@ -77,26 +105,30 @@ def list_assignments(
         models.Assignment.deadline.is_(None), models.Assignment.deadline.asc()
     ).all()
 
-    subjects = _get_subject_map(db)
+    subjects = _get_subject_map(db, current_user.id)
     return [serialize_assignment(a, subjects.get(a.subject_id)) for a in assignments]
 
 
 @router.get("/{assignment_id}", response_model=schemas.AssignmentOut)
-def get_assignment(assignment_id: str, db: Session = Depends(get_db)):
-    assignment = db.query(models.Assignment).filter(models.Assignment.id == assignment_id).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
+def get_assignment(
+    assignment_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    assignment = _get_owned_assignment(db, assignment_id, current_user.id)
     subject = db.query(models.Subject).filter(models.Subject.id == assignment.subject_id).first()
     return serialize_assignment(assignment, subject)
 
 
 @router.post("", response_model=schemas.AssignmentOut, status_code=201)
-def create_assignment(payload: schemas.AssignmentCreate, db: Session = Depends(get_db)):
-    subject = db.query(models.Subject).filter(models.Subject.id == payload.subject_id).first()
-    if not subject:
-        raise HTTPException(status_code=404, detail="Subject not found")
+def create_assignment(
+    payload: schemas.AssignmentCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    subject = _get_owned_subject(db, payload.subject_id, current_user.id)
     if payload.topic_id:
-        topic = db.query(models.Topic).filter(models.Topic.id == payload.topic_id).first()
+        topic = db.query(models.Topic).filter(
+            models.Topic.id == payload.topic_id, models.Topic.subject_id == subject.id
+        ).first()
         if not topic:
             raise HTTPException(status_code=404, detail="Topic not found")
 
@@ -104,15 +136,18 @@ def create_assignment(payload: schemas.AssignmentCreate, db: Session = Depends(g
     db.add(assignment)
     db.commit()
     db.refresh(assignment)
-    log_activity(db, f'Added assignment "{assignment.title}" ({subject.name})', icon="plus-circle")
+    log_activity(db, f'Added assignment "{assignment.title}" ({subject.name})', icon="plus-circle", user_id=current_user.id)
     return serialize_assignment(assignment, subject)
 
 
 @router.patch("/{assignment_id}", response_model=schemas.AssignmentOut)
-def update_assignment(assignment_id: str, payload: schemas.AssignmentUpdate, db: Session = Depends(get_db)):
-    assignment = db.query(models.Assignment).filter(models.Assignment.id == assignment_id).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
+def update_assignment(
+    assignment_id: str,
+    payload: schemas.AssignmentUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    assignment = _get_owned_assignment(db, assignment_id, current_user.id)
 
     data = payload.model_dump(exclude_unset=True)
     clear_deadline = data.pop("clear_deadline", False)
@@ -146,24 +181,24 @@ def update_assignment(assignment_id: str, payload: schemas.AssignmentUpdate, db:
     subject = db.query(models.Subject).filter(models.Subject.id == assignment.subject_id).first()
 
     if assignment.status == models.AssignmentStatus.done and not was_done:
-        log_activity(db, f'Completed assignment "{assignment.title}"', icon="check-circle")
+        log_activity(db, f'Completed assignment "{assignment.title}"', icon="check-circle", user_id=current_user.id)
     else:
-        log_activity(db, f'Updated assignment "{assignment.title}"', icon="pencil")
+        log_activity(db, f'Updated assignment "{assignment.title}"', icon="pencil", user_id=current_user.id)
 
     return serialize_assignment(assignment, subject)
 
 
 @router.delete("/{assignment_id}", status_code=204)
-def delete_assignment(assignment_id: str, db: Session = Depends(get_db)):
-    assignment = db.query(models.Assignment).filter(models.Assignment.id == assignment_id).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
+def delete_assignment(
+    assignment_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+):
+    assignment = _get_owned_assignment(db, assignment_id, current_user.id)
     title = assignment.title
     for att in json.loads(assignment.attachments or "[]"):
         delete_upload(att["filename"])
     db.delete(assignment)
     db.commit()
-    log_activity(db, f'Deleted assignment "{title}"', icon="trash-2")
+    log_activity(db, f'Deleted assignment "{title}"', icon="trash-2", user_id=current_user.id)
     return None
 
 
@@ -171,11 +206,12 @@ def delete_assignment(assignment_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{assignment_id}/attachments", response_model=schemas.AssignmentOut)
 async def upload_assignment_attachment(
-    assignment_id: str, file: UploadFile = File(...), db: Session = Depends(get_db)
+    assignment_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
 ):
-    assignment = db.query(models.Assignment).filter(models.Assignment.id == assignment_id).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
+    assignment = _get_owned_assignment(db, assignment_id, current_user.id)
 
     try:
         meta = await save_upload(file)
@@ -190,15 +226,18 @@ async def upload_assignment_attachment(
     db.refresh(assignment)
 
     subject = db.query(models.Subject).filter(models.Subject.id == assignment.subject_id).first()
-    log_activity(db, f'Attached "{meta["original_name"]}" to "{assignment.title}"', icon="paperclip")
+    log_activity(db, f'Attached "{meta["original_name"]}" to "{assignment.title}"', icon="paperclip", user_id=current_user.id)
     return serialize_assignment(assignment, subject)
 
 
 @router.delete("/{assignment_id}/attachments/{filename}", response_model=schemas.AssignmentOut)
-def delete_assignment_attachment(assignment_id: str, filename: str, db: Session = Depends(get_db)):
-    assignment = db.query(models.Assignment).filter(models.Assignment.id == assignment_id).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
+def delete_assignment_attachment(
+    assignment_id: str,
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    assignment = _get_owned_assignment(db, assignment_id, current_user.id)
 
     attachments = json.loads(assignment.attachments or "[]")
     remaining = [a for a in attachments if a["filename"] != filename]

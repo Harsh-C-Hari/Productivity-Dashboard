@@ -23,6 +23,94 @@ this file's "Session 11" section at the bottom.)
 
 ---
 
+# Authorization Merge Progress
+
+This section is the source of truth for the 5-phase merge bringing the
+Authorization & Multi-user Data Isolation implementation (from the
+older `authorisation-fixed` branch) into `main`, without losing any of
+main's newer features (profile image picker, AI Workspace
+improvements, notification improvements, ZIP manager fixes, mobile UI
+polish). Whoever picks up the next phase in a new conversation should
+be able to read this and know exactly what's already done.
+
+- **Phase 1: COMPLETE** — Foundation: added
+  `backend/app/ownership_helpers.py` (new, verbatim from the auth
+  branch); applied the auth branch's `database.py` (adds
+  `run_startup_migrations()`) and `main.py` (calls it on startup) in
+  full; added `user_id` ownership columns to `models.py` for Task,
+  TimetableSlot, Subject, StudySession, the AI Workspace/Conversation
+  family, and KnowledgeArticle; kept main's wider `avatar_url` in both
+  `models.py` and `schemas.py` rather than the auth branch's narrower
+  version. See `CHANGELOG.md` → "Merge Phase 1/5 — Foundation" for
+  full detail.
+- **Phase 2: COMPLETE** — 24 backend router/helper files (pure
+  auth/ownership-filtering changes, no competing feature work) ported
+  verbatim from the `authorisation-fixed` branch. See `CHANGELOG.md` →
+  "Merge Phase 2/5 — Bulk Authorization Routers" for the full file
+  list.
+- **Phase 3: COMPLETE** — verified `bugs.py`, `project_zips.py`,
+  `notification_helpers.py`, and `project_invitations.py` were already
+  in their correct final state; no code changes required. See
+  `CHANGELOG.md` → "Merge Phase 3/5 — Authorization Verification
+  (Bugs, ZIPs, Invitations)" for the verification detail.
+- **Phase 4: COMPLETE** — added `frontend/src/lib/queryClient.ts`
+  (new, verbatim from the auth branch); applied the auth branch's
+  `App.tsx` (imports `queryClient` instead of constructing it inline)
+  and `AuthContext.tsx` (`clearSession` now calls `queryClient.clear()`
+  so no user's cached data survives into the next login on a shared
+  device); `Profile.tsx` investigated and confirmed to need no
+  changes — the auth branch's version differs only in its older
+  avatar-input UI, with no authorization-specific content. See
+  `CHANGELOG.md` → "Merge Phase 4/5 — Frontend Session Isolation" for
+  full detail.
+- **Phase 5: COMPLETE** — full verification pass against the true
+  original `main.zip` (not just prior phases' intermediate zips). Found
+  and fixed one genuine issue: the root-level `.gitignore` from
+  original `main` had gone missing somewhere in Phases 1-4 (restored
+  verbatim, confirmed byte-identical). Every authorization/ownership
+  helper call site, every `.query(` call site, every personal-data and
+  project-scoped endpoint, and every feature named in the task brief
+  (avatar upload chain, Notification Center, invitation resend, AI
+  Workspace, ZIP Manager, Dashboard widgets, mobile UI) was checked and
+  confirmed correct. Backend `py_compile`s clean; frontend `tsc
+  --noEmit` passes with zero errors. See `CHANGELOG.md` → "Merge Phase
+  5/5 — Final Verification" for the full sweep detail.
+
+### Merge complete — closing summary
+
+The 5-phase merge bringing the Authorization & Multi-user Data
+Isolation implementation into `main` is done. **31 files** differ from
+the original pre-merge `main` (4 foundation, 24 bulk auth routers, 3
+frontend session-isolation files, plus the new `ownership_helpers.py`
+and `queryClient.ts` counted within those totals), and every other file
+in the project was verified byte-identical to original `main` -- one
+accidentally-dropped `.gitignore` was the only casualty found across
+all 5 phases, and it's been restored. Nothing from main's newer feature
+work (profile image picker, AI Workspace improvements, notification
+improvements, ZIP manager fixes, mobile UI polish) was lost in the
+process.
+
+Authorization now covers the app in two layers. **Project Content**
+(Projects and everything hanging off a `project_id` — Phases, Features,
+Todos, Bugs, Milestones, Documents, Project Resources, Timeline,
+Conversations/Zips/Handoffs/Knowledge-Articles when project-attached)
+is gated by `require_project_access`/`get_accessible_project_ids`,
+which check actual project membership and role permissions rather than
+trusting a caller-supplied id. **Personal data** (Tasks, Timetable,
+Subjects and everything under Study Hub, AI Accounts and everything
+that hangs off one, Prompt Templates, standalone Knowledge Articles) is
+gated by a `user_id` column added to each top-level table (with
+inherited-ownership children resolving their parent first), enforced
+either via the shared `owned_query`/`get_owned_or_404` helpers or an
+equivalent local join-filter, and always 404s rather than 403s on a
+mismatch so a resource's existence is never leaked to someone who
+doesn't own it. Endpoints that previously had no auth dependency at all
+(e.g. `token_trackers.py`, `user_preferences.py`,
+`notification_preferences.py`) now require `get_current_user` and
+enforce these rules like everything else.
+
+---
+
 # Current Development Focus
 
 The current feature being developed is:

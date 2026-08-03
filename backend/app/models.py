@@ -88,6 +88,13 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(String, primary_key=True, default=gen_id)
+    # Personal-data ownership (data-isolation fix). Nullable only so
+    # legacy pre-migration rows (created before this column existed)
+    # don't break the schema -- see main.py's `_run_startup_migrations`.
+    # A NULL owner is never returned to any user (see
+    # ownership_helpers.filter_owned): it's treated as orphaned, not
+    # globally visible.
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, default="")
     category = Column(SAEnum(TaskCategory), default=TaskCategory.other, nullable=False)
@@ -117,6 +124,7 @@ class TimetableSlot(Base):
     __tablename__ = "timetable_slots"
 
     id = Column(String, primary_key=True, default=gen_id)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     title = Column(String(200), nullable=False)
     location = Column(String(200), default="")
     day_of_week = Column(SAEnum(DayOfWeek), nullable=False)
@@ -161,6 +169,12 @@ class Subject(Base):
     __tablename__ = "subjects"
 
     id = Column(String, primary_key=True, default=gen_id)
+    # Owning user. Topic/Assignment/Note/Resource are all subject-scoped
+    # (they carry subject_id, not their own user_id) and inherit
+    # ownership by joining back to this column -- same "child inherits
+    # from parent" pattern the task brief requires for Project content,
+    # applied to Study Hub content via Subject instead of Project.
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String(200), nullable=False)
     code = Column(String(40), default="")  # e.g. "CS 301"
     instructor = Column(String(120), default="")
@@ -266,6 +280,11 @@ class StudySession(Base):
     __tablename__ = "study_sessions"
 
     id = Column(String, primary_key=True, default=gen_id)
+    # subject_id/assignment_id are both nullable (a session can be
+    # logged with no subject attached), so ownership can't always be
+    # derived by joining through Subject -- StudySession needs its own
+    # user_id, unlike Topic/Assignment/Note/Resource.
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     subject_id = Column(String, ForeignKey("subjects.id", ondelete="SET NULL"), nullable=True)
     assignment_id = Column(String, ForeignKey("assignments.id", ondelete="SET NULL"), nullable=True)
     session_type = Column(SAEnum(StudySessionType), default=StudySessionType.pomodoro, nullable=False)
@@ -707,6 +726,10 @@ class AIAccount(Base):
     __tablename__ = "ai_accounts"
 
     id = Column(String, primary_key=True, default=gen_id)
+    # Owning user. Conversation/ProjectZip/AIHandoff/TokenTracker are all
+    # ai_account-scoped and inherit ownership via ai_account_id, the AI
+    # Workspace analogue of Subject.user_id above.
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     name = Column(String(200), nullable=False, index=True)
     provider = Column(SAEnum(AIProvider), default=AIProvider.other, nullable=False, index=True)
     model = Column(String(100), default="")  # e.g. "claude-sonnet-4-6"
@@ -769,6 +792,10 @@ class PromptTemplate(Base):
     __tablename__ = "prompt_templates"
 
     id = Column(String, primary_key=True, default=gen_id)
+    # No natural parent to inherit ownership from (deliberately not
+    # scoped to a project/account, per the class docstring), so this
+    # needs its own user_id, like Task/TimetableSlot/Subject/StudySession.
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     title = Column(String(200), nullable=False, index=True)
     description = Column(Text, default="")
     content = Column(Text, nullable=False, default="")
@@ -869,6 +896,10 @@ class KnowledgeArticle(Base):
     __tablename__ = "knowledge_articles"
 
     id = Column(String, primary_key=True, default=gen_id)
+    # Author/owner. When project_id is set, access is via project
+    # membership (Project Content rule); when project_id is NULL this is
+    # a personal knowledge article and user_id is what scopes it.
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     project_id = Column(String, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(200), nullable=False, index=True)
     content = Column(Text, default="")  # markdown

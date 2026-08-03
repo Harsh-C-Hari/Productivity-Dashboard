@@ -104,15 +104,23 @@ def build_project_summary(db: Session, project: models.Project) -> schemas.Proje
 
 # ---------- Cross-project helpers (shared with dashboard.py / analytics.py) ----------
 
-def get_projects_progress(db: Session, include_archived: bool = False) -> List[schemas.ProjectSummary]:
-    query = db.query(models.Project)
+def get_projects_progress(
+    db: Session, project_ids: Optional[List[str]] = None, include_archived: bool = False
+) -> List[schemas.ProjectSummary]:
+    """`project_ids=None` was the pre-fix default and meant "every
+    project in the database" -- now that this is called from
+    dashboard.py/study_hub-style summaries as well as the already-scoped
+    `/summary` route, every caller must pass the caller's own
+    `get_accessible_project_ids(...)` result explicitly. There is no
+    "give me everything" caller left, by design."""
+    query = db.query(models.Project).filter(models.Project.id.in_(project_ids or []))
     if not include_archived:
         query = query.filter(models.Project.archived.is_(False))
     projects = query.order_by(models.Project.updated_at.desc()).all()
     return [build_project_summary(db, p) for p in projects]
 
 
-def get_upcoming_milestones(db: Session, limit: int = 8) -> List[schemas.MilestoneOut]:
+def get_upcoming_milestones(db: Session, project_ids: List[str], limit: int = 8) -> List[schemas.MilestoneOut]:
     from datetime import datetime, timedelta
 
     now = datetime.utcnow()
@@ -122,6 +130,7 @@ def get_upcoming_milestones(db: Session, limit: int = 8) -> List[schemas.Milesto
     milestones = (
         db.query(models.Milestone)
         .filter(
+            models.Milestone.project_id.in_(project_ids),
             models.Milestone.completed.is_(False),
             models.Milestone.target_date.isnot(None),
             models.Milestone.target_date <= week_end,
@@ -141,7 +150,7 @@ def get_upcoming_milestones(db: Session, limit: int = 8) -> List[schemas.Milesto
     return out
 
 
-def get_overdue_project_todos(db: Session, limit: int = 8) -> List[schemas.ProjectTodoOut]:
+def get_overdue_project_todos(db: Session, project_ids: List[str], limit: int = 8) -> List[schemas.ProjectTodoOut]:
     from datetime import datetime
 
     now = datetime.utcnow()
@@ -151,6 +160,7 @@ def get_overdue_project_todos(db: Session, limit: int = 8) -> List[schemas.Proje
     todos = (
         db.query(models.ProjectTodo)
         .filter(
+            models.ProjectTodo.project_id.in_(project_ids),
             models.ProjectTodo.status != models.TaskStatus.done,
             models.ProjectTodo.deadline.isnot(None),
             models.ProjectTodo.deadline < now,
@@ -181,9 +191,10 @@ def get_overdue_project_todos(db: Session, limit: int = 8) -> List[schemas.Proje
     return out
 
 
-def get_recent_timeline(db: Session, limit: int = 10) -> List[schemas.TimelineEventOut]:
+def get_recent_timeline(db: Session, project_ids: List[str], limit: int = 10) -> List[schemas.TimelineEventOut]:
     events = (
         db.query(models.TimelineEvent)
+        .filter(models.TimelineEvent.project_id.in_(project_ids))
         .order_by(models.TimelineEvent.created_at.desc())
         .limit(limit)
         .all()
@@ -204,16 +215,13 @@ def get_workspace_summary(
     across every project this user can see. Same role as
     `study_hub.get_study_hub_summary` (that module has no per-user
     scoping concept since Study Hub was never made collaborative)."""
-    accessible_project_ids = set(get_accessible_project_ids(db, current_user.id))
-    projects_progress = [
-        p for p in get_projects_progress(db, include_archived=include_archived)
-        if p.project.id in accessible_project_ids
-    ]
+    accessible_project_ids = list(get_accessible_project_ids(db, current_user.id))
+    projects_progress = get_projects_progress(db, project_ids=accessible_project_ids, include_archived=include_archived)
     return schemas.ProjectWorkspaceSummary(
         projects_progress=projects_progress,
-        upcoming_milestones=[m for m in get_upcoming_milestones(db)],
-        overdue_todos=[t for t in get_overdue_project_todos(db)],
-        recent_timeline=get_recent_timeline(db),
+        upcoming_milestones=get_upcoming_milestones(db, accessible_project_ids),
+        overdue_todos=get_overdue_project_todos(db, accessible_project_ids),
+        recent_timeline=get_recent_timeline(db, accessible_project_ids),
     )
 
 

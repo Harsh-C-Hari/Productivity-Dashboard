@@ -6,6 +6,276 @@ This file tracks notable changes to the project, newest first.
 
 ---
 
+## Merge Phase 5/5 — Final Verification
+
+Status: Phase 5 (final) of the 5-phase merge bringing the Authorization
+& Multi-user Data Isolation implementation into `main`. This phase did
+not port any new code from the `authorisation-fixed` branch -- its job
+was to independently verify the merge produced by Phases 1-4 against
+the true original `main` (not just against prior phases' intermediate
+zips), and to fix anything found broken. This is the last phase; there
+is no Phase 6.
+
+### Scope diff (Phase 4 zip vs. original main.zip)
+
+Confirmed exactly 31 files differ from original `main`, matching the
+expected breakdown: 4 from Phase 1 (`database.py`, `main.py`,
+`models.py` changed; `ownership_helpers.py` new), 24 from Phase 2 (the
+bulk auth-only routers, including `activity_log.py`), 0 from Phase 3
+(verification only), 3 from Phase 4 (`App.tsx`, `AuthContext.tsx`
+changed; `queryClient.ts` new). `AI_HANDOFF.md`/`CHANGELOG.md` differ
+as expected (doc updates each phase). Every other file was confirmed
+byte-identical to original `main` -- with one exception, below.
+
+### Bug found and fixed: missing `.gitignore`
+
+The root-level `.gitignore` present in original `main` was **absent**
+from the Phase 4 zip -- not a file any phase was supposed to touch, so
+this was accidental data loss somewhere in Phases 1-4 (most likely
+dropped during a re-zip step, since every other dotfile in the tree --
+`.env.example`, `.eslintrc.cjs`, `backend/uploads/.gitkeep` -- survived
+intact). Fixed by restoring it verbatim from `main.zip`; diffed the
+restored file against the original to confirm it is now byte-identical.
+This is the only code/asset change made in Phase 5.
+
+### Verification sweep results (no further issues found)
+
+- **Ownership/project-access helper usage**: every `owned_query`,
+  `get_owned_or_404`, `get_accessible_project_ids`, and
+  `require_project_access` call site (116 call sites total across the
+  backend) checked individually for correct model/user/project scoping.
+  All correct. `require_owner_id` is defined but has no call sites --
+  not a bug: the inherited-ownership modules (`notes.py`,
+  `resources.py`, `assignments.py`, `conversations.py`,
+  `ai_handoffs.py`, `token_trackers.py`) instead use local
+  join-filter-in-one-query helpers that enforce the same ownership
+  check via a different (equally correct) technique.
+- **Unscoped query sweep**: every `.query(` call site across every
+  router reviewed. All hits were either already scoped by an
+  ownership/access filter, or narrowed by an already-validated parent
+  id (e.g. `token_trackers.get_account_token_total` querying
+  `TokenTracker.ai_account_id == account_id` after
+  `_get_owned_account` already confirmed that account belongs to the
+  caller). No unscoped leaks found.
+- **Ownership filter sweep**: every personal-data module (tasks,
+  timetable, subjects, study hub, AI accounts, prompt templates,
+  knowledge articles, notes, resources, user/notification preferences)
+  confirmed to filter by the current user's ownership in every
+  endpoint.
+- **Project-access sweep**: every project-scoped query confirmed
+  protected, including `bugs.py`'s and `project_zips.py`'s
+  cross-project listing endpoints (correctly switch between
+  `require_project_access` for a single project and
+  `get_accessible_project_ids` for the "across every project I can
+  access" case).
+- **Feature-survival check**: Avatar picker/cropper and the full
+  photo-upload chain (`Profile.tsx` -> `schemas.py`'s
+  `max_length=2_000_000` -> `models.py`'s `Text` column) traced and
+  confirmed intact -- this chain was already correct in original
+  `main` and untouched by the merge. Notification Center, the
+  resend-invitation -> `delete_stale_invitation_notifications` wiring,
+  AI Workspace analytics/navigation, ZIP Manager's cross-project "All
+  projects" filter (frontend `ZipManagerView.tsx`/`useProjectZips.ts`
+  through to `project_zips.py`), mobile nav, and the Dashboard's
+  cross-project Open Bugs widget (`OpenBugsWidget.tsx` calling
+  `GET /api/bugs` with no `project_id`) all read through end-to-end and
+  confirmed working as designed.
+- **Startup/schema integrity**: `database.py`'s
+  `run_startup_migrations()` covers exactly the 7 tables that gained a
+  `user_id` column in `models.py` (tasks, timetable_slots, subjects,
+  study_sessions, ai_accounts, prompt_templates, knowledge_articles);
+  confirmed called from `main.py` immediately after
+  `models.Base.metadata.create_all(bind=engine)`.
+- **Compile check**: every backend `.py` file passes `py_compile`
+  cleanly. Frontend `npm install` succeeded (network access available
+  this phase) and `npx tsc --noEmit` passed with zero errors, so no
+  fallback manual re-read was needed.
+
+### Verdict
+
+**Production-ready**, after the `.gitignore` restoration above. No
+authorization gaps, no lost main-branch code, no regressions found.
+
+---
+
+## Merge Phase 4/5 — Frontend Session Isolation
+
+Status: Phase 4 of a 5-phase merge bringing the Authorization &
+Multi-user Data Isolation implementation (from the older
+`authorisation-fixed` branch) into `main` without losing any of
+main's newer features. This phase covers the frontend half of the
+merge: a `QueryClient` extraction and the logout cache-clearing fix
+that depends on it.
+
+### `frontend/src/lib/queryClient.ts` (new)
+
+Added verbatim from the authorization branch. Pulls the `QueryClient`
+instance out of `App.tsx` into its own module so `AuthContext.tsx` can
+import and call `.clear()` on it without creating a circular
+dependency (`App.tsx` renders `AuthProvider`, so `AuthProvider` can't
+import the client back out of `App.tsx`).
+
+### `frontend/src/App.tsx`
+
+Now imports `queryClient` from `lib/queryClient.ts` instead of
+constructing it inline. No other changes.
+
+### `frontend/src/context/AuthContext.tsx`
+
+`clearSession` — the single choke point that `logout`, the
+refresh-failure path, and the `onAuthExpired` listener all run
+through — now calls `queryClient.clear()`. Previously, logging out
+left every cached query (dashboard widgets, tasks, Study Hub, Project
+Workspace, AI Workspace, notifications) sitting in memory, so on a
+shared device the next person to log in could briefly see the
+previous user's cached data before their own refetch resolved. No
+other changes.
+
+### `frontend/src/pages/Profile.tsx` — investigated, no change made
+
+This was originally flagged as needing a hand-merge (main's
+file-picker + image-editing avatar UI vs. the authorization branch's
+older plain text-URL input). Diffing it against the authorization
+branch confirms the same false-positive pattern seen with
+`bugs.py`/`project_zips.py` in Phase 3: the authorization branch's
+`Profile.tsx` has no authorization-specific content at all — the only
+differences are the older avatar-input UI (a plain URL `<Input>`
+instead of main's file-picker/image-editing flow), nothing related to
+permissions, ownership, or access control. `Profile.tsx` was left
+unchanged. This should not be re-flagged in Phase 5.
+
+---
+
+## Merge Phase 3/5 — Authorization Verification (Bugs, ZIPs, Invitations)
+
+Status: Phase 3 of a 5-phase merge bringing the Authorization &
+Multi-user Data Isolation implementation (from the older
+`authorisation-fixed` branch) into `main` without losing any of
+main's newer features. The original merge plan assumed
+`bugs.py`, `project_zips.py`, `notification_helpers.py`, and
+`project_invitations.py` each had real, competing logic on both
+branches requiring a hand-merge. That assumption was checked and found
+incorrect: all 4 files were already in their correct final state in
+`main` before this merge began, and **no code changes were made in
+this phase.**
+
+### `backend/app/routers/bugs.py` and `backend/app/routers/project_zips.py`
+
+Diffing both files against the authorization branch shows the
+authorization branch is the one that's behind, not competing: its
+`list_bugs`/`list_project_zips` require `project_id` and return
+single-project results only. Main's versions already had the more
+complete behavior — `project_id` optional (`Optional[str]`, powering
+the Dashboard's cross-project "Open Bugs" widget and the ZIP Manager's
+"All projects" filter), `require_project_access` called when a
+`project_id` is supplied, and `get_accessible_project_ids` filtering
+the query when it's omitted. Every other endpoint in both files
+(get/create/update/delete) was independently confirmed to already call
+`require_project_access` before touching data. Main was ahead of the
+authorization branch on these two files, not merging against it.
+
+### `backend/app/notification_helpers.py` + `backend/app/routers/project_invitations.py`
+
+`delete_stale_invitation_notifications(db, invitation_id)` — which
+clears a resent invitation's stale earlier notification so its
+now-rotated token's link doesn't sit in the invitee's Notification
+Center pointing at a 404 forever — was confirmed present in
+`notification_helpers.py` and confirmed called from the resend
+endpoint in `project_invitations.py`. This is a main-only feature that
+simply postdates the authorization branch's snapshot of these files;
+diffing shows no other difference between the two branches' copies of
+either file, so there was no competing authorization logic to
+reconcile here either.
+
+---
+
+## Merge Phase 2/5 — Bulk Authorization Routers
+
+Status: Phase 2 of a 5-phase merge bringing the Authorization &
+Multi-user Data Isolation implementation (from the older
+`authorisation-fixed` branch) into `main` without losing any of
+main's newer features. This phase bulk-copies 24 backend router/helper
+files that were pure auth/ownership-filtering additions in the
+authorization branch, with no competing feature work from main in the
+same file — each was verbatim-replaced in full after diffing to
+confirm no non-auth changes were present.
+
+### Changed (verbatim from `authorisation-fixed` branch)
+
+- `backend/app/activity_log.py`
+- `backend/app/routers/activity.py`
+- `backend/app/routers/ai_accounts.py`
+- `backend/app/routers/ai_analytics.py`
+- `backend/app/routers/ai_handoffs.py`
+- `backend/app/routers/analytics.py`
+- `backend/app/routers/assignments.py`
+- `backend/app/routers/conversations.py`
+- `backend/app/routers/dashboard.py`
+- `backend/app/routers/knowledge_articles.py`
+- `backend/app/routers/notes.py`
+- `backend/app/routers/notification_preferences.py`
+- `backend/app/routers/projects.py`
+- `backend/app/routers/prompt_templates.py`
+- `backend/app/routers/resources.py`
+- `backend/app/routers/search.py`
+- `backend/app/routers/study_hub.py`
+- `backend/app/routers/study_sessions.py`
+- `backend/app/routers/subjects.py`
+- `backend/app/routers/tasks.py`
+- `backend/app/routers/timetable.py`
+- `backend/app/routers/token_trackers.py`
+- `backend/app/routers/user_preferences.py`
+- `backend/app/routers/users.py`
+
+No other files were touched in this phase.
+
+---
+
+## Merge Phase 1/5 — Foundation
+
+Status: Phase 1 of a 5-phase merge bringing the Authorization &
+Multi-user Data Isolation implementation (from the older
+`authorisation-fixed` branch) into `main` without losing any of
+main's newer features. This phase lays the foundation only:
+migrations, ownership helpers, and the model/schema columns needed by
+later phases. No routers or frontend code were touched.
+
+### Added
+
+- **`backend/app/ownership_helpers.py`** (new file, copied verbatim
+  from the authorization branch): shared `owned_query`,
+  `require_owner_id`, and `get_owned_or_404` helpers used by later
+  phases to scope personal (non-Project) data to its owning user.
+- **`backend/app/database.py`**: added `run_startup_migrations()` and
+  the `_OWNERSHIP_COLUMNS` list, a dependency-free migration that adds
+  the new `user_id` ownership columns to any pre-existing
+  `dashboard.db` on startup (no-op on a fresh database).
+- **`backend/app/main.py`**: imports and calls
+  `run_startup_migrations()` on startup, right after table creation.
+- **`backend/app/models.py`**: added nullable `user_id` ForeignKey
+  columns (to `users.id`, `ondelete="CASCADE"`) to `Task`,
+  `TimetableSlot`, `Subject`, `StudySession`, the AI Workspace /
+  Conversation-family models, and `KnowledgeArticle`, so each row can
+  be scoped to its owning user.
+
+### Excluded (intentional)
+
+- **`avatar_url`**: the authorization branch narrowed this column to
+  `Column(String(500), default="")` (models.py) and
+  `Field(..., max_length=500)` (schemas.py, 4 occurrences). Main
+  already widened `avatar_url` to `Column(Text, default="")` /
+  `max_length=2_000_000` to support base64 profile-photo data, a
+  main-only feature. That narrowing was **not** applied — main's wider
+  version was kept as-is in both files. Every other authorization-branch
+  change in models.py and schemas.py was applied; schemas.py in fact
+  had no other differences, so it is otherwise identical to main's
+  version.
+
+No other files were changed in this phase. See `AI_HANDOFF.md` →
+"Authorization Merge Progress" for what's left.
+
+---
+
 ## [1.0.0] - Invitation System Completion & Notification Center (Conversation 8)
 
 Status: Feature-complete per task brief (Parts 1-8). Scope: finish the

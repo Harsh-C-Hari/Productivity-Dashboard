@@ -6,32 +6,88 @@ brief asked for (conversations per project/provider, prompt
 categories, ZIP upload count, knowledge articles, provider usage,
 conversation status, recent activity). Computed on the fly from the
 child tables, same philosophy as `routers/analytics.py`.
+
+Personal module + Project Content, mixed: every query in this file is
+scoped to (a) AI accounts/prompt templates/knowledge articles the
+current user owns, plus (b) conversations/zips/handoffs/articles
+attached to a project they can access -- mirrors the access rules
+already implemented in ai_accounts.py/conversations.py/
+knowledge_articles.py/ai_handoffs.py. Previously this entire router had
+no auth dependency at all.
 """
-from typing import Dict
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import models, schemas
+from ..auth_dependencies import get_current_user
+from ..project_helpers import get_accessible_project_ids
 
 router = APIRouter(prefix="/api/ai-analytics", tags=["ai-workspace"])
 
 
+def _owned_account_ids(db: Session, user_id: str) -> List[str]:
+    return [a.id for a in db.query(models.AIAccount).filter(models.AIAccount.user_id == user_id).all()]
+
+
+def _visible_conversations(db: Session, user_id: str, owned_account_ids: List[str], accessible_project_ids: List[str]):
+    return db.query(models.Conversation).filter(
+        or_(
+            models.Conversation.ai_account_id.in_(owned_account_ids),
+            models.Conversation.project_id.in_(accessible_project_ids),
+        )
+    ).all()
+
+
+def _visible_handoffs(db: Session, owned_account_ids: List[str], owned_conversation_ids: List[str], accessible_project_ids: List[str]):
+    return db.query(models.AIHandoff).filter(
+        or_(
+            models.AIHandoff.project_id.in_(accessible_project_ids),
+            models.AIHandoff.ai_account_id.in_(owned_account_ids),
+            models.AIHandoff.conversation_id.in_(owned_conversation_ids),
+        )
+    ).all()
+
+
+def _visible_articles(db: Session, user_id: str, accessible_project_ids: List[str]):
+    return db.query(models.KnowledgeArticle).filter(
+        or_(
+            models.KnowledgeArticle.user_id == user_id,
+            models.KnowledgeArticle.project_id.in_(accessible_project_ids),
+        )
+    ).all()
+
+
+def _visible_zips(db: Session, accessible_project_ids: List[str]):
+    # ProjectZip is always project-scoped (see project_zips.py).
+    return db.query(models.ProjectZip).filter(models.ProjectZip.project_id.in_(accessible_project_ids)).all()
+
+
+def _visible_token_rows(db: Session, owned_account_ids: List[str]):
+    return db.query(models.TokenTracker).filter(models.TokenTracker.ai_account_id.in_(owned_account_ids)).all()
+
+
 @router.get("/summary", response_model=schemas.AIWorkspaceSummary)
-def get_ai_workspace_summary(db: Session = Depends(get_db)):
-    accounts = db.query(models.AIAccount).all()
+def get_ai_workspace_summary(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    owned_account_ids = _owned_account_ids(db, current_user.id)
+    accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+
+    accounts = db.query(models.AIAccount).filter(models.AIAccount.user_id == current_user.id).all()
     active_accounts = [a for a in accounts if a.status == models.AIAccountStatus.active]
 
-    conversations = db.query(models.Conversation).all()
+    conversations = _visible_conversations(db, current_user.id, owned_account_ids, accessible_project_ids)
+    owned_conversation_ids = [c.id for c in conversations if c.ai_account_id in owned_account_ids]
     active_conversations = [c for c in conversations if c.status == models.ConversationStatus.active]
 
-    prompt_count = db.query(models.PromptTemplate).count()
-    zip_count = db.query(models.ProjectZip).count()
-    handoff_count = db.query(models.AIHandoff).count()
-    article_count = db.query(models.KnowledgeArticle).count()
+    prompt_count = db.query(models.PromptTemplate).filter(models.PromptTemplate.user_id == current_user.id).count()
+    zip_count = len(_visible_zips(db, accessible_project_ids))
+    handoff_count = len(_visible_handoffs(db, owned_account_ids, owned_conversation_ids, accessible_project_ids))
+    article_count = len(_visible_articles(db, current_user.id, accessible_project_ids))
 
-    token_rows = db.query(models.TokenTracker).all()
+    token_rows = _visible_token_rows(db, owned_account_ids)
     total_input = sum(t.input_tokens or 0 for t in token_rows)
     total_output = sum(t.output_tokens or 0 for t in token_rows)
     total_tokens = sum(t.total_tokens or 0 for t in token_rows)
@@ -58,12 +114,11 @@ def get_ai_workspace_summary(db: Session = Depends(get_db)):
         ],
     )
 
-    recent_handoffs = (
-        db.query(models.AIHandoff).order_by(models.AIHandoff.created_at.desc()).limit(5).all()
-    )
-    recent_conversations = (
-        db.query(models.Conversation).order_by(models.Conversation.updated_at.desc()).limit(5).all()
-    )
+    recent_handoffs = sorted(
+        _visible_handoffs(db, owned_account_ids, owned_conversation_ids, accessible_project_ids),
+        key=lambda h: h.created_at, reverse=True,
+    )[:5]
+    recent_conversations = sorted(conversations, key=lambda c: c.updated_at, reverse=True)[:5]
 
     # Import here (not at module top) to avoid a circular import with
     # ai_handoffs.py's serializer, mirroring how projects.py lazily
@@ -87,9 +142,12 @@ def get_ai_workspace_summary(db: Session = Depends(get_db)):
 
 
 @router.get("/conversations-per-project")
-def conversations_per_project(db: Session = Depends(get_db)):
-    conversations = db.query(models.Conversation).filter(models.Conversation.project_id.isnot(None)).all()
-    projects = {p.id: p.name for p in db.query(models.Project).all()}
+def conversations_per_project(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+    conversations = db.query(models.Conversation).filter(
+        models.Conversation.project_id.in_(accessible_project_ids)
+    ).all()
+    projects = {p.id: p.name for p in db.query(models.Project).filter(models.Project.id.in_(accessible_project_ids)).all()}
     counts: Dict[str, int] = {}
     for c in conversations:
         counts[c.project_id] = counts.get(c.project_id, 0) + 1
@@ -100,9 +158,11 @@ def conversations_per_project(db: Session = Depends(get_db)):
 
 
 @router.get("/conversations-per-provider")
-def conversations_per_provider(db: Session = Depends(get_db)):
-    conversations = db.query(models.Conversation).all()
-    account_provider = {a.id: a.provider for a in db.query(models.AIAccount).all()}
+def conversations_per_provider(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    owned_account_ids = _owned_account_ids(db, current_user.id)
+    accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+    conversations = _visible_conversations(db, current_user.id, owned_account_ids, accessible_project_ids)
+    account_provider = {a.id: a.provider for a in db.query(models.AIAccount).filter(models.AIAccount.id.in_(owned_account_ids)).all()}
     counts: Dict[str, int] = {p.value: 0 for p in models.AIProvider}
     for c in conversations:
         provider = account_provider.get(c.ai_account_id)
@@ -112,8 +172,8 @@ def conversations_per_provider(db: Session = Depends(get_db)):
 
 
 @router.get("/prompt-categories")
-def prompt_categories(db: Session = Depends(get_db)):
-    prompts = db.query(models.PromptTemplate).all()
+def prompt_categories(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    prompts = db.query(models.PromptTemplate).filter(models.PromptTemplate.user_id == current_user.id).all()
     counts: Dict[str, int] = {}
     for p in prompts:
         counts[p.category] = counts.get(p.category, 0) + 1
@@ -124,9 +184,10 @@ def prompt_categories(db: Session = Depends(get_db)):
 
 
 @router.get("/zip-upload-count")
-def zip_upload_count(db: Session = Depends(get_db)):
-    zips = db.query(models.ProjectZip).all()
-    projects = {p.id: p.name for p in db.query(models.Project).all()}
+def zip_upload_count(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+    zips = _visible_zips(db, accessible_project_ids)
+    projects = {p.id: p.name for p in db.query(models.Project).filter(models.Project.id.in_(accessible_project_ids)).all()}
     counts: Dict[str, int] = {}
     for z in zips:
         counts[z.project_id] = counts.get(z.project_id, 0) + 1
@@ -140,8 +201,9 @@ def zip_upload_count(db: Session = Depends(get_db)):
 
 
 @router.get("/knowledge-articles")
-def knowledge_article_breakdown(db: Session = Depends(get_db)):
-    articles = db.query(models.KnowledgeArticle).all()
+def knowledge_article_breakdown(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+    articles = _visible_articles(db, current_user.id, accessible_project_ids)
     by_category: Dict[str, int] = {}
     by_source: Dict[str, int] = {s.value: 0 for s in models.KnowledgeSource}
     for a in articles:
@@ -155,9 +217,10 @@ def knowledge_article_breakdown(db: Session = Depends(get_db)):
 
 
 @router.get("/provider-usage")
-def provider_usage(db: Session = Depends(get_db)):
-    token_rows = db.query(models.TokenTracker).all()
-    account_provider = {a.id: a.provider for a in db.query(models.AIAccount).all()}
+def provider_usage(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    owned_account_ids = _owned_account_ids(db, current_user.id)
+    token_rows = _visible_token_rows(db, owned_account_ids)
+    account_provider = {a.id: a.provider for a in db.query(models.AIAccount).filter(models.AIAccount.id.in_(owned_account_ids)).all()}
     totals: Dict[str, Dict[str, float]] = {p.value: {"total_tokens": 0, "total_estimated_cost_usd": 0.0} for p in models.AIProvider}
     for t in token_rows:
         provider = account_provider.get(t.ai_account_id)
@@ -176,8 +239,10 @@ def provider_usage(db: Session = Depends(get_db)):
 
 
 @router.get("/conversation-status")
-def conversation_status_breakdown(db: Session = Depends(get_db)):
-    conversations = db.query(models.Conversation).all()
+def conversation_status_breakdown(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    owned_account_ids = _owned_account_ids(db, current_user.id)
+    accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+    conversations = _visible_conversations(db, current_user.id, owned_account_ids, accessible_project_ids)
     counts: Dict[str, int] = {s.value: 0 for s in models.ConversationStatus}
     for c in conversations:
         counts[c.status.value] = counts.get(c.status.value, 0) + 1
@@ -185,13 +250,13 @@ def conversation_status_breakdown(db: Session = Depends(get_db)):
 
 
 @router.get("/token-limits-reached")
-def token_limits_reached(db: Session = Depends(get_db)):
+def token_limits_reached(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Counts 'Token limit reached' activity log events per account,
     since no persisted limit-reached flag exists on TokenTracker/
     AIAccount (see routers/token_trackers.py's module docstring)."""
     events = (
         db.query(models.ActivityLog)
-        .filter(models.ActivityLog.message.ilike("Token limit reached for%"))
+        .filter(models.ActivityLog.message.ilike("Token limit reached for%"), models.ActivityLog.user_id == current_user.id)
         .all()
     )
     return {"count": len(events), "events": [{"message": e.message, "created_at": e.created_at} for e in events]}

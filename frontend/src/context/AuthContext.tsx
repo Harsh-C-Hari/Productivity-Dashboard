@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { api } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
 import type { LoginRequest, RegisterRequest, TokenResponse, User } from "@/types/auth";
 import {
   clearPersistedSession,
@@ -97,6 +98,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearPersistedSession();
     setUser(null);
     setStatus("unauthenticated");
+    // Data-isolation fix: this used to leave every cached query (dashboard
+    // widgets, tasks, Study Hub, Project Workspace, AI Workspace,
+    // notifications -- everything React Query has ever fetched) sitting in
+    // memory. On a shared device, the next person to log in would see
+    // stale renders of the previous user's data for a moment (and any
+    // component that reads the cache before its own refetch resolves
+    // would show it outright). `clearSession` is the single choke point
+    // every logout/expiry/failed-refresh path already runs through (see
+    // `logout`, `refresh`'s catch branch, and the `onAuthExpired`
+    // listener below), so clearing here covers all of them.
+    queryClient.clear();
   }, [clearRefreshTimer]);
 
   const refresh = useCallback(async (): Promise<boolean> => {

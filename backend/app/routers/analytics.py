@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import models, schemas
-from ..auth_dependencies import require_permission
+from ..auth_dependencies import get_current_user, require_permission
+from ..project_helpers import get_accessible_project_ids
 
 router = APIRouter(prefix="/api/analytics", tags=["project-workspace"])
 
@@ -162,19 +163,26 @@ def get_project_analytics(
 
 
 @router.get("/overview", response_model=schemas.WorkspaceAnalytics)
-def get_workspace_analytics(include_archived: bool = False, db: Session = Depends(get_db)):
-    """Cross-project rollup: every project's analytics plus a combined
-    velocity series across the whole workspace."""
-    query = db.query(models.Project)
+def get_workspace_analytics(
+    include_archived: bool = False,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Cross-project rollup: every accessible project's analytics plus a
+    combined velocity series across just those projects (owned + member,
+    same as every other cross-project endpoint)."""
+    accessible_project_ids = get_accessible_project_ids(db, current_user.id)
+    query = db.query(models.Project).filter(models.Project.id.in_(accessible_project_ids))
     if not include_archived:
         query = query.filter(models.Project.archived.is_(False))
     projects = query.all()
 
     project_analytics = [build_project_analytics(db, p) for p in projects]
 
-    all_todos = db.query(models.ProjectTodo).all()
-    all_bugs = db.query(models.Bug).all()
-    all_milestones = db.query(models.Milestone).all()
+    project_ids = [p.id for p in projects]
+    all_todos = db.query(models.ProjectTodo).filter(models.ProjectTodo.project_id.in_(project_ids)).all()
+    all_bugs = db.query(models.Bug).filter(models.Bug.project_id.in_(project_ids)).all()
+    all_milestones = db.query(models.Milestone).filter(models.Milestone.project_id.in_(project_ids)).all()
 
     active_projects = [p for p in projects if p.status == models.ProjectStatus.active]
     completed_projects = [p for p in projects if p.status == models.ProjectStatus.completed]

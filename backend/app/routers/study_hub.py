@@ -4,6 +4,11 @@ progress, upcoming/overdue assignments, today's sessions, analytics) and
 a single search endpoint spanning subjects/assignments/notes/resources.
 
 Mirrors the role `routers/dashboard.py` plays for the main dashboard.
+
+Personal module: every helper here takes `user_id` and scopes its
+queries to that user's own Subjects (and, for StudySession, the
+session's own `user_id` -- see models.py). None of these functions has
+a "give me everything" mode any more.
 """
 from datetime import datetime, timedelta
 from typing import List
@@ -13,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import models, schemas
+from ..auth_dependencies import get_current_user
 from .assignments import serialize_assignment
 from .study_sessions import serialize_session
 from .notes import serialize_note
@@ -45,7 +51,7 @@ def _compute_streaks(study_dates: set) -> tuple:
     return current, longest
 
 
-def _build_analytics(db: Session, subjects: List[models.Subject]) -> schemas.StudyAnalytics:
+def _build_analytics(db: Session, subjects: List[models.Subject], user_id: str) -> schemas.StudyAnalytics:
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=6)  # rolling 7-day window including today
@@ -53,7 +59,7 @@ def _build_analytics(db: Session, subjects: List[models.Subject]) -> schemas.Stu
 
     completed_sessions = (
         db.query(models.StudySession)
-        .filter(models.StudySession.ended_at.isnot(None))
+        .filter(models.StudySession.user_id == user_id, models.StudySession.ended_at.isnot(None))
         .all()
     )
 
@@ -101,21 +107,26 @@ def _build_analytics(db: Session, subjects: List[models.Subject]) -> schemas.Stu
     )
 
 
-def get_subjects_progress(db: Session) -> List[schemas.SubjectProgress]:
+def get_subjects_progress(db: Session, user_id: str) -> List[schemas.SubjectProgress]:
     """Per-subject completion/hours summary, shared by the Study Hub
     summary endpoint and the main dashboard's Subject Progress widget."""
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=6)
 
-    subjects = db.query(models.Subject).order_by(models.Subject.name.asc()).all()
-    all_assignments = db.query(models.Assignment).all()
-    all_topics = db.query(models.Topic).all()
-    all_resources = db.query(models.Resource).all()
-    all_notes = db.query(models.Note).all()
+    subjects = db.query(models.Subject).filter(models.Subject.user_id == user_id).order_by(models.Subject.name.asc()).all()
+    subject_ids = [s.id for s in subjects]
+    all_assignments = db.query(models.Assignment).filter(models.Assignment.subject_id.in_(subject_ids)).all()
+    all_topics = db.query(models.Topic).filter(models.Topic.subject_id.in_(subject_ids)).all()
+    all_resources = db.query(models.Resource).filter(models.Resource.subject_id.in_(subject_ids)).all()
+    all_notes = db.query(models.Note).filter(models.Note.subject_id.in_(subject_ids)).all()
     completed_sessions_this_week = (
         db.query(models.StudySession)
-        .filter(models.StudySession.ended_at.isnot(None), models.StudySession.started_at >= week_start)
+        .filter(
+            models.StudySession.user_id == user_id,
+            models.StudySession.ended_at.isnot(None),
+            models.StudySession.started_at >= week_start,
+        )
         .all()
     )
 
@@ -150,7 +161,7 @@ def get_subjects_progress(db: Session) -> List[schemas.SubjectProgress]:
     return progress
 
 
-def get_upcoming_overdue_assignments(db: Session):
+def get_upcoming_overdue_assignments(db: Session, user_id: str):
     """Returns (upcoming, overdue) as serialized AssignmentOut lists,
     shared by the Study Hub summary and the main dashboard."""
     now = datetime.utcnow()
@@ -158,8 +169,12 @@ def get_upcoming_overdue_assignments(db: Session):
     today_end = today_start + timedelta(days=1)
     week_end = today_start + timedelta(days=7)
 
-    all_assignments = db.query(models.Assignment).all()
-    subject_map = {s.id: s for s in db.query(models.Subject).all()}
+    subject_map = {s.id: s for s in db.query(models.Subject).filter(models.Subject.user_id == user_id).all()}
+    all_assignments = (
+        db.query(models.Assignment)
+        .filter(models.Assignment.subject_id.in_(subject_map.keys()))
+        .all()
+    )
     active_assignments = [a for a in all_assignments if a.status != models.AssignmentStatus.done]
 
     overdue = sorted(
@@ -177,60 +192,78 @@ def get_upcoming_overdue_assignments(db: Session):
     )
 
 
-def get_today_study_sessions(db: Session) -> List[schemas.StudySessionOut]:
+def get_today_study_sessions(db: Session, user_id: str) -> List[schemas.StudySessionOut]:
     now = datetime.utcnow()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
 
     sessions = (
         db.query(models.StudySession)
-        .filter(models.StudySession.started_at >= today_start, models.StudySession.started_at < today_end)
+        .filter(
+            models.StudySession.user_id == user_id,
+            models.StudySession.started_at >= today_start,
+            models.StudySession.started_at < today_end,
+        )
         .order_by(models.StudySession.started_at.desc())
         .all()
     )
-    subject_map = {s.id: s for s in db.query(models.Subject).all()}
+    subject_map = {s.id: s for s in db.query(models.Subject).filter(models.Subject.user_id == user_id).all()}
     return [serialize_session(s, subject_map.get(s.subject_id)) for s in sessions]
 
 
 @router.get("/summary", response_model=schemas.StudyHubSummary)
-def get_study_hub_summary(db: Session = Depends(get_db)):
-    subjects = db.query(models.Subject).order_by(models.Subject.name.asc()).all()
-    upcoming_assignments, overdue_assignments = get_upcoming_overdue_assignments(db)
+def get_study_hub_summary(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    subjects = db.query(models.Subject).filter(models.Subject.user_id == current_user.id).order_by(models.Subject.name.asc()).all()
+    upcoming_assignments, overdue_assignments = get_upcoming_overdue_assignments(db, current_user.id)
 
     return schemas.StudyHubSummary(
-        subjects_progress=get_subjects_progress(db),
+        subjects_progress=get_subjects_progress(db, current_user.id),
         upcoming_assignments=upcoming_assignments,
         overdue_assignments=overdue_assignments,
-        today_study_sessions=get_today_study_sessions(db),
-        analytics=_build_analytics(db, subjects),
+        today_study_sessions=get_today_study_sessions(db, current_user.id),
+        analytics=_build_analytics(db, subjects, current_user.id),
     )
 
 
 @router.get("/search", response_model=schemas.StudyHubSearchResult)
-def search_study_hub(q: str, db: Session = Depends(get_db)):
+def search_study_hub(q: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     like = f"%{q}%"
+    subject_map = {s.id: s for s in db.query(models.Subject).filter(models.Subject.user_id == current_user.id).all()}
+    owned_subject_ids = list(subject_map.keys())
 
     subjects = (
         db.query(models.Subject)
-        .filter((models.Subject.name.ilike(like)) | (models.Subject.code.ilike(like)))
+        .filter(
+            models.Subject.user_id == current_user.id,
+            (models.Subject.name.ilike(like)) | (models.Subject.code.ilike(like)),
+        )
         .limit(10)
         .all()
     )
     assignments = (
         db.query(models.Assignment)
-        .filter((models.Assignment.title.ilike(like)) | (models.Assignment.description.ilike(like)))
+        .filter(
+            models.Assignment.subject_id.in_(owned_subject_ids),
+            (models.Assignment.title.ilike(like)) | (models.Assignment.description.ilike(like)),
+        )
         .limit(10)
         .all()
     )
     notes = (
         db.query(models.Note)
-        .filter((models.Note.title.ilike(like)) | (models.Note.content.ilike(like)))
+        .filter(
+            models.Note.subject_id.in_(owned_subject_ids),
+            (models.Note.title.ilike(like)) | (models.Note.content.ilike(like)),
+        )
         .limit(10)
         .all()
     )
-    resources = db.query(models.Resource).filter(models.Resource.title.ilike(like)).limit(10).all()
-
-    subject_map = {s.id: s for s in db.query(models.Subject).all()}
+    resources = (
+        db.query(models.Resource)
+        .filter(models.Resource.subject_id.in_(owned_subject_ids), models.Resource.title.ilike(like))
+        .limit(10)
+        .all()
+    )
 
     return schemas.StudyHubSearchResult(
         subjects=subjects,
