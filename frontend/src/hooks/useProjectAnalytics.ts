@@ -9,6 +9,7 @@ export function useProjectAnalytics(projectId: string | undefined) {
     queryKey: [...PROJECT_ANALYTICS_KEY, projectId],
     queryFn: () => api.getProjectAnalytics(projectId as string),
     enabled: !!projectId,
+    meta: { projectId },
   });
 }
 

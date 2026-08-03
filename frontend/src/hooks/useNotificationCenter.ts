@@ -15,9 +15,11 @@ export function useNotificationsList(params?: { is_read?: boolean; category?: No
   return useQuery({
     queryKey: [...NOTIFICATIONS_KEY, params ?? {}],
     queryFn: () => api.getNotifications(params),
-    // Notifications can arrive from another tab/session; poll gently so an
-    // open Notification Center / sidebar badge doesn't go stale for long.
-    refetchInterval: 30_000,
+    // Notifications can arrive from another tab/session (an invite being
+    // accepted, a member being removed, etc.); poll so an open
+    // Notification Center / sidebar badge picks them up on its own
+    // instead of needing the page to be left and re-visited.
+    refetchInterval: 10_000,
   });
 }
 
@@ -25,7 +27,7 @@ export function useNotificationCounts() {
   return useQuery({
     queryKey: NOTIFICATION_COUNTS_KEY,
     queryFn: () => api.getNotificationCounts(),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 }
 

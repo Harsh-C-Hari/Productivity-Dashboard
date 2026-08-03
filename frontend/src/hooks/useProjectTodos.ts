@@ -23,6 +23,7 @@ export function useProjectTodos(params?: {
     queryKey: [...PROJECT_TODOS_KEY, params ?? {}],
     queryFn: () => api.getProjectTodos(params),
     enabled: params?.projectId !== undefined,
+    meta: { projectId: params?.projectId },
   });
 }
 

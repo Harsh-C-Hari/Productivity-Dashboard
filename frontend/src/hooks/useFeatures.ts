@@ -21,6 +21,7 @@ export function useFeatures(params?: {
     queryKey: [...FEATURES_KEY, params ?? {}],
     queryFn: () => api.getFeatures(params),
     enabled: params?.projectId !== undefined,
+    meta: { projectId: params?.projectId },
   });
 }
 

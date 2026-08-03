@@ -11,6 +11,7 @@ import {
   UserPlus,
   UserMinus,
   ShieldCheck,
+  Ban,
   Bell,
   type LucideIcon,
 } from "lucide-react";
@@ -34,6 +35,7 @@ export const NOTIFICATION_CATEGORY_META: Record<NotificationCategory, Notificati
   project_update: { label: "Project Update", icon: FolderKanban, color: "bg-secondary/15 text-secondary" },
   member_joined: { label: "Member Joined", icon: UserPlus, color: "bg-urgency-low/15 text-urgency-low" },
   member_left: { label: "Member Left", icon: UserMinus, color: "bg-white/10 text-muted-foreground" },
+  project_access_revoked: { label: "Access Revoked", icon: Ban, color: "bg-urgency-critical/15 text-urgency-critical" },
   role_changed: { label: "Role Changed", icon: ShieldCheck, color: "bg-secondary/15 text-secondary" },
   system: { label: "System", icon: Bell, color: "bg-white/10 text-muted-foreground" },
 };

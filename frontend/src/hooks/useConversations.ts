@@ -18,6 +18,7 @@ export function useConversations(params?: {
   return useQuery({
     queryKey: [...CONVERSATIONS_KEY, params ?? {}],
     queryFn: () => api.getConversations(params),
+    meta: { projectId: params?.projectId },
   });
 }
 

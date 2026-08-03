@@ -13,6 +13,18 @@ export function useProjectMembers(projectId: string | undefined, params?: { stat
     queryKey: [...PROJECT_MEMBERS_KEY, projectId, params ?? {}],
     queryFn: () => api.getProjectMembers(projectId as string, params),
     enabled: !!projectId,
+    meta: { projectId },
+    // Accepting an invitation invalidates this query in the *accepting*
+    // user's own session (see hooks/useProjectInvitations.ts /
+    // pages/InvitationLanding.tsx / NotificationRow.tsx), but an admin
+    // watching the Team tab in a different session has no way to learn
+    // about that -- there's no websocket/push layer here. Poll modestly
+    // while this is mounted so a newly-accepted member shows up on its
+    // own within a few seconds instead of waiting for staleTime + a
+    // window blur/refocus cycle. React Query automatically pauses this
+    // while the tab is backgrounded (refetchIntervalInBackground defaults
+    // to false), so it's not polling when nobody's looking at it.
+    refetchInterval: 10_000,
   });
 }
 
@@ -21,6 +33,8 @@ export function useProjectCollaborationSummary(projectId: string | undefined) {
     queryKey: [...PROJECT_MEMBERS_KEY, projectId, "summary"],
     queryFn: () => api.getProjectCollaborationSummary(projectId as string),
     enabled: !!projectId,
+    meta: { projectId },
+    refetchInterval: 10_000,
   });
 }
 

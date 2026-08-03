@@ -17,6 +17,7 @@ from ..database import get_db
 from .. import models, schemas
 from ..activity_log import log_activity, log_activity_event
 from ..auth_dependencies import get_current_user, require_membership, require_owner, require_permission
+from ..notification_helpers import create_notification
 from ..project_helpers import count_active_owners, get_membership, is_admin
 from .projects import get_project_or_404
 
@@ -259,6 +260,19 @@ def remove_member(
         action="removed",
         entity_type="member",
         entity_id=member_id,
+    )
+    # `project_id` is intentionally omitted here (unlike member_joined/etc)
+    # -- the recipient no longer has access to that project, so a
+    # notification carrying its id would let the frontend try to deep-link
+    # into a page it's about to be bounced back out of (see
+    # lib/queryClient.ts's project-access-lost handling). Point `action_url`
+    # at the project list instead of the now-inaccessible project itself.
+    create_notification(
+        db,
+        user_id=user_id,
+        category=models.NotificationCategory.project_access_revoked,
+        title=f'You were removed from "{project.name}"',
+        action_url="/projects",
     )
     return None
 

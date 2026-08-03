@@ -40,7 +40,7 @@ export default function AIWorkspace() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div ref={tabScrollRef} className="glass-panel flex gap-1 overflow-x-auto rounded-xl p-1.5 scrollbar-thin">
+      <div ref={tabScrollRef} className="glass-panel flex gap-1 overflow-x-auto rounded-xl p-1.5 no-scrollbar">
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}

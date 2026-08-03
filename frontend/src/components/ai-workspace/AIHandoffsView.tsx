@@ -13,6 +13,7 @@ import { useAIHandoffs, useCreateAIHandoff, useUpdateAIHandoff, useDeleteAIHando
 import { useProjects } from "@/hooks/useProjects";
 import { useAIAccounts } from "@/hooks/useAIAccounts";
 import { useConversations } from "@/hooks/useConversations";
+import { useProjectAccessLostEffect } from "@/hooks/useProjectAccessGuard";
 import type { AIHandoff, AIHandoffInput } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 
@@ -37,6 +38,18 @@ export function AIHandoffsView() {
   const [editHandoff, setEditHandoff] = useState<AIHandoff | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<AIHandoff | null>(null);
   const deleteHandoff = useDeleteAIHandoff();
+
+  // If the project this view is currently filtered to becomes
+  // inaccessible (member removed), drop back to "all projects" and close
+  // any handoff dialog scoped to it -- the cache purge and toast are
+  // already handled centrally.
+  useProjectAccessLostEffect(projectFilter === "all" ? undefined : projectFilter, () => {
+    setProjectFilter("all");
+    setAddOpen(false);
+    setViewHandoff(null);
+    setEditHandoff(null);
+    setConfirmDelete(null);
+  });
 
   const projectsById = useMemo(() => new Map((projects ?? []).map((p) => [p.id, p])), [projects]);
   const accountsById = useMemo(() => new Map((accounts ?? []).map((a) => [a.id, a])), [accounts]);
@@ -225,6 +238,12 @@ function AIHandoffForm({ initial, onDone }: { initial?: AIHandoff; onDone: () =>
   const [knownIssues, setKnownIssues] = useState(initial?.known_issues ?? "");
   const [nextObjective, setNextObjective] = useState(initial?.next_objective ?? "");
 
+  // Selecting a project the user no longer has access to would otherwise
+  // keep refetching its conversations (403 -> cache cleared -> refetch ->
+  // 403 -> ...), firing an endless stream of toasts. Deselect it instead
+  // -- same behavior as the "filter by project" dropdown above.
+  useProjectAccessLostEffect(projectId || undefined, () => setProjectId(""));
+
   const submitting = createHandoff.isPending || updateHandoff.isPending;
 
   function handleSubmit(e: React.FormEvent) {
@@ -248,7 +267,7 @@ function AIHandoffForm({ initial, onDone }: { initial?: AIHandoff; onDone: () =>
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto pr-1">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-h-[70vh] overflow-y-auto px-1">
       <div className="grid grid-cols-3 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Project</Label>
@@ -313,7 +332,7 @@ function AIHandoffForm({ initial, onDone }: { initial?: AIHandoff; onDone: () =>
         <Textarea id="handoff-next" value={nextObjective} onChange={(e) => setNextObjective(e.target.value)} rows={2} placeholder="Exact next step for the next session" />
       </div>
 
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-1 sticky bottom-0 bg-base-950/80 backdrop-blur -mx-1 px-1 py-2">
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end pt-3 sticky bottom-0 py-2 [&>button]:shadow-lg [&>button]:shadow-black/40">
         <Button type="button" variant="ghost" onClick={onDone}>Cancel</Button>
         <Button type="submit" disabled={submitting}>{initial ? "Save changes" : "Save handoff"}</Button>
       </div>

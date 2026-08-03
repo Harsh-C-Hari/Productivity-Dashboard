@@ -17,6 +17,7 @@ import {
   useReplaceProjectZip,
   useDeleteProjectZip,
 } from "@/hooks/useProjectZips";
+import { useProjectAccessLostEffect } from "@/hooks/useProjectAccessGuard";
 import type { ProjectZip } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 
@@ -40,6 +41,17 @@ export function ZipManagerView() {
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const [replaceTarget, setReplaceTarget] = useState<ProjectZip | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ProjectZip | null>(null);
+
+  // If the project this view is currently filtered to becomes
+  // inaccessible (member removed), drop the filter back to "all
+  // projects" and close any zip dialog that was scoped to it -- the
+  // cache purge and toast are already handled centrally.
+  useProjectAccessLostEffect(projectId || undefined, () => {
+    setProjectId("");
+    setUploadOpen(false);
+    setReplaceTarget(null);
+    setConfirmDelete(null);
+  });
 
   const { data: zips, isLoading } = useProjectZips(projectId ? { projectId } : undefined);
   const replaceZip = useReplaceProjectZip();
@@ -206,6 +218,12 @@ function ZipUploadForm({ defaultProjectId, onDone }: { defaultProjectId?: string
   const [versionLabel, setVersionLabel] = useState("");
   const [notes, setNotes] = useState("");
   const [file, setFile] = useState<File | null>(null);
+
+  // Selecting a project the user no longer has access to would otherwise
+  // keep refetching its conversations (403 -> cache cleared -> refetch ->
+  // 403 -> ...), firing an endless stream of toasts. Deselect it instead
+  // -- same behavior as the "filter by project" dropdown above.
+  useProjectAccessLostEffect(selectedProjectId || undefined, () => setSelectedProjectId(""));
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

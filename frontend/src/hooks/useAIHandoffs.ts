@@ -14,6 +14,7 @@ export function useAIHandoffs(params?: {
   return useQuery({
     queryKey: [...AI_HANDOFFS_KEY, params ?? {}],
     queryFn: () => api.getAIHandoffs(params),
+    meta: { projectId: params?.projectId },
   });
 }
 
@@ -32,6 +33,7 @@ export function useLatestAIHandoff(params?: { projectId?: string; aiAccountId?: 
     queryFn: () => api.getLatestAIHandoff(params),
     enabled,
     retry: false,
+    meta: { projectId: params?.projectId },
   });
 }
 

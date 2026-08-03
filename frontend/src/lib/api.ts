@@ -166,6 +166,21 @@ async function refreshAccessToken(): Promise<boolean> {
   return result;
 }
 
+/** Thrown by `request`/`requestForm` for any non-ok response. Carries the
+ * HTTP status alongside the human-readable message so callers that need to
+ * branch on the *kind* of failure (e.g. "was this a 403/404, meaning the
+ * user lost access to something?") don't have to parse `.message` text.
+ * See lib/queryClient.ts's QueryCache/MutationCache `onError`, which uses
+ * `status` to detect project-access-lost errors centrally. */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 /** FastAPI's error `detail` is a plain string for most hand-raised
  * HTTPExceptions, but for Pydantic (422) validation failures it's an
  * array of `{ msg, loc, type, ... }` objects -- passing that straight
@@ -210,7 +225,7 @@ async function request<T>(path: string, options: RequestInit = {}, _retried = fa
     } catch {
       // response had no JSON body
     }
-    throw new Error(detail || `Request failed: ${res.status}`);
+    throw new ApiError(detail || `Request failed: ${res.status}`, res.status);
   }
 
   if (res.status === 204) return undefined as T;
@@ -234,7 +249,7 @@ async function requestForm<T>(path: string, formData: FormData): Promise<T> {
     } catch {
       // response had no JSON body
     }
-    throw new Error(detail || `Request failed: ${res.status}`);
+    throw new ApiError(detail || `Request failed: ${res.status}`, res.status);
   }
 
   return res.json() as Promise<T>;

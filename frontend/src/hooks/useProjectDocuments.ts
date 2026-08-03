@@ -11,6 +11,7 @@ export function useProjectDocuments(params?: { projectId?: string; q?: string })
     queryKey: [...PROJECT_DOCUMENTS_KEY, params ?? {}],
     queryFn: () => api.getProjectDocuments(params),
     enabled: params?.projectId !== undefined,
+    meta: { projectId: params?.projectId },
   });
 }
 

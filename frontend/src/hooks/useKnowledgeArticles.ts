@@ -19,6 +19,7 @@ export function useKnowledgeArticles(params?: {
   return useQuery({
     queryKey: [...KNOWLEDGE_ARTICLES_KEY, params ?? {}],
     queryFn: () => api.getKnowledgeArticles(params),
+    meta: { projectId: params?.projectId },
   });
 }
 

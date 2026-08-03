@@ -11,6 +11,7 @@ export function useProjectResources(params?: { projectId?: string; resourceType?
     queryKey: [...PROJECT_RESOURCES_KEY, params ?? {}],
     queryFn: () => api.getProjectResources(params),
     enabled: params?.projectId !== undefined,
+    meta: { projectId: params?.projectId },
   });
 }
 

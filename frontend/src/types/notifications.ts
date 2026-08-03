@@ -14,6 +14,7 @@ export type NotificationCategory =
   | "project_update"
   | "member_joined"
   | "member_left"
+  | "project_access_revoked"
   | "role_changed"
   | "system";
 

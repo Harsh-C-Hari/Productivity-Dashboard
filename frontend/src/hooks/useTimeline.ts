@@ -17,6 +17,7 @@ export function useTimelineEvents(params?: {
     queryKey: [...TIMELINE_KEY, params ?? {}],
     queryFn: () => api.getTimelineEvents(params),
     enabled: params?.projectId !== undefined,
+    meta: { projectId: params?.projectId },
   });
 }
 

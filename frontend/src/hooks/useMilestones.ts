@@ -20,6 +20,7 @@ export function useMilestones(params?: {
     queryKey: [...MILESTONES_KEY, params ?? {}],
     queryFn: () => api.getMilestones(params),
     enabled: params?.projectId !== undefined,
+    meta: { projectId: params?.projectId },
   });
 }
 

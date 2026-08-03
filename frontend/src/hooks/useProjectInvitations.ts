@@ -11,6 +11,11 @@ export function useProjectInvitations(projectId: string | undefined, status?: In
     queryKey: [...PROJECT_INVITATIONS_KEY, projectId, status ?? "all"],
     queryFn: () => api.getProjectInvitations(projectId as string, status),
     enabled: !!projectId,
+    meta: { projectId },
+    // Same reasoning as useProjectMembers: acceptance is invalidated in
+    // the invitee's own session, not the admin's -- poll while the panel
+    // is open so a pending invite clears itself once acted on.
+    refetchInterval: 10_000,
   });
 }
 

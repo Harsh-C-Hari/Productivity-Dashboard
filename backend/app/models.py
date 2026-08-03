@@ -1267,6 +1267,7 @@ class NotificationCategory(str, enum.Enum):
     project_update = "project_update"
     member_joined = "member_joined"
     member_left = "member_left"
+    project_access_revoked = "project_access_revoked"
     role_changed = "role_changed"
     system = "system"
 

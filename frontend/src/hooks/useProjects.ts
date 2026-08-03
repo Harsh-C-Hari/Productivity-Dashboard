@@ -26,6 +26,7 @@ export function useProject(id: string | undefined) {
     queryKey: [...PROJECTS_KEY, id],
     queryFn: () => api.getProject(id as string),
     enabled: !!id,
+    meta: { projectId: id },
   });
 }
 
@@ -34,6 +35,7 @@ export function useProjectSummary(id: string | undefined) {
     queryKey: [...PROJECTS_KEY, id, "summary"],
     queryFn: () => api.getProjectSummary(id as string),
     enabled: !!id,
+    meta: { projectId: id },
   });
 }
 

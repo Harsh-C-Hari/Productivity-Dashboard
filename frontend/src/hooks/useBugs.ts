@@ -23,6 +23,7 @@ export function useBugs(params?: {
   return useQuery({
     queryKey: [...BUGS_KEY, params ?? {}],
     queryFn: () => api.getBugs(params),
+    meta: { projectId: params?.projectId },
   });
 }
 

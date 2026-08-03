@@ -6,10 +6,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { QuickCapture } from "@/components/tasks/QuickCapture";
 import { useNotificationScheduler } from "@/hooks/useNotificationScheduler";
 import { useTokenRefreshScheduler } from "@/hooks/useTokenRefreshScheduler";
+import { useProjectAccessListener } from "@/hooks/useProjectAccessGuard";
 
 export function AppLayout() {
   useNotificationScheduler();
   useTokenRefreshScheduler();
+  useProjectAccessListener();
 
   return (
     <div className="flex h-dvh w-full overflow-hidden">

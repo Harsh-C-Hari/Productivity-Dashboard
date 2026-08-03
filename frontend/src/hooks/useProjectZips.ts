@@ -8,6 +8,7 @@ export function useProjectZips(params?: { projectId?: string; aiAccountId?: stri
   return useQuery({
     queryKey: [...PROJECT_ZIPS_KEY, params ?? {}],
     queryFn: () => api.getProjectZips(params),
+    meta: { projectId: params?.projectId },
   });
 }
 
@@ -17,6 +18,7 @@ export function useCurrentProjectZip(projectId: string | undefined) {
     queryFn: () => api.getCurrentProjectZip(projectId as string),
     enabled: !!projectId,
     retry: false,
+    meta: { projectId },
   });
 }
 

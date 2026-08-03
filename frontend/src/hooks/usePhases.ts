@@ -12,6 +12,7 @@ export function usePhases(params?: { projectId?: string; status?: PhaseStatus })
     queryKey: [...PHASES_KEY, params ?? {}],
     queryFn: () => api.getPhases(params),
     enabled: params?.projectId !== undefined,
+    meta: { projectId: params?.projectId },
   });
 }
 
