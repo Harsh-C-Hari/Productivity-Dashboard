@@ -17,7 +17,6 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -104,10 +103,12 @@ def create_invitation(
     current_user: models.User = Depends(require_permission("invite_members")),
 ):
     """Create invitation. `payload.email` is actually an "email or
-    username" identifier: it must resolve to a User already registered
-    in the database (matched against either `User.email` or
-    `User.username`) -- invitations can no longer be created for an
-    address/handle that has no matching account. Once resolved, the
+    username" identifier, and `payload.identifier_type` says which one
+    it is: it must resolve to a User already registered in the
+    database, matched against `User.email` (identifier_type="email")
+    or `User.username` (identifier_type="username") -- not both --
+    so invitations can no longer be created for an address/handle that
+    has no matching account under the selected type. Once resolved, the
     invitation is always stored keyed by that user's real *email*
     (regardless of which form the caller typed), so every downstream
     consumer of `ProjectInvitation.email` (duplicate checks,
@@ -132,16 +133,21 @@ def create_invitation(
         raise HTTPException(status_code=404, detail="Role not found")
 
     identifier = payload.email.strip()
-    existing_user = (
-        db.query(models.User)
-        .filter(or_(models.User.email == identifier, models.User.username == identifier))
-        .first()
-    )
+
+    # `identifier_type` (set via the Email/Username dropdown in the
+    # invite form) picks which single column to match against, instead
+    # of matching against email OR username for every request -- e.g.
+    # a username that happens to collide with someone else's email
+    # local-part should never resolve to the wrong account.
+    if payload.identifier_type == "username":
+        existing_user = db.query(models.User).filter(models.User.username == identifier).first()
+        not_found_detail = f'No registered user found with username "{identifier}". Invitations can only be sent to existing accounts.'
+    else:
+        existing_user = db.query(models.User).filter(models.User.email == identifier).first()
+        not_found_detail = f'No registered user found with email "{identifier}". Invitations can only be sent to existing accounts.'
+
     if not existing_user:
-        raise HTTPException(
-            status_code=404,
-            detail=f'No registered user found with email or username "{identifier}". Invitations can only be sent to existing accounts.',
-        )
+        raise HTTPException(status_code=404, detail=not_found_detail)
 
     invite_email = existing_user.email
 

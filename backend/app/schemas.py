@@ -3,8 +3,8 @@ Pydantic schemas: the API's public contract. Kept separate from the ORM
 models so internal DB structure can evolve without breaking the API shape.
 """
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional, List, Literal
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pydantic import field_validator
 
@@ -1541,17 +1541,50 @@ class ProjectMemberOut(ProjectMemberBase):
 
 class ProjectInvitationBase(BaseModel):
     project_id: str
-    email: str = Field(..., min_length=3, max_length=255)
+    # `email` is the raw identifier the caller typed; whether it's
+    # matched against `User.email` or `User.username` is driven by
+    # `identifier_type` below. min_length=1 (not the old min_length=3)
+    # since a valid username can be as short as 1 character elsewhere
+    # in this app -- per-type length/shape rules are enforced by the
+    # `identifier_type`-aware validator instead.
+    email: str = Field(..., min_length=1, max_length=255)
+    identifier_type: Literal["email", "username"] = "email"
     role_id: Optional[str] = None
     invited_by_user_id: Optional[str] = None
     expires_at: datetime
 
+    @field_validator("email")
+    @classmethod
+    def _strip_identifier(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def _validate_identifier_shape(self) -> "ProjectInvitationBase":
+        """Enforces per-type shape so the dropdown selection actually
+        constrains what's accepted, instead of silently accepting
+        either shape regardless of what the caller picked:
+        - identifier_type="email": must look like an email (contains
+          "@") and be at least 3 characters.
+        - identifier_type="username": any non-empty string, matching
+          `UserOut.username`'s own min_length=1 elsewhere in this file.
+        """
+        identifier = self.email
+        if self.identifier_type == "email":
+            if len(identifier) < 3 or "@" not in identifier:
+                raise ValueError('"email" must be a valid email address when identifier_type is "email"')
+        else:
+            if len(identifier) < 1:
+                raise ValueError('"email" must be a non-empty username when identifier_type is "username"')
+        return self
+
 
 class ProjectInvitationCreate(ProjectInvitationBase):
-    """`email` here is actually an "email or username" identifier: the
-    router resolves it against `User.email` OR `User.username` and
-    rejects the request (404) if neither matches a registered account.
-    The stored `ProjectInvitation.email` is always the resolved user's
+    """`email` here is actually an "email or username" identifier,
+    disambiguated by `identifier_type`: the router resolves it against
+    `User.email` (identifier_type="email") OR `User.username`
+    (identifier_type="username") only -- not both -- and rejects the
+    request (404) if that specific field has no matching account. The
+    stored `ProjectInvitation.email` is always the resolved user's
     real email, never the raw identifier the caller typed."""
     pass
 

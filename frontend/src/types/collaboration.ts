@@ -102,6 +102,12 @@ export interface ProjectMemberWithUser extends ProjectMember {
 
 // ---------- Project Invitations ----------
 
+// What kind of identifier `ProjectInvitation.email` / `ProjectInvitationInput.email`
+// was resolved from -- picked via the Email/Username dropdown in
+// InviteMemberDialog. Determines whether the backend matches the typed
+// value against User.email or User.username (never both).
+export type InvitationIdentifierType = "email" | "username";
+
 export interface ProjectInvitation {
   id: string;
   project_id: string;
@@ -119,6 +125,7 @@ export interface ProjectInvitation {
 export interface ProjectInvitationInput {
   project_id: string;
   email: string;
+  identifier_type?: InvitationIdentifierType;
   role_id?: string | null;
   expires_at: string;
 }

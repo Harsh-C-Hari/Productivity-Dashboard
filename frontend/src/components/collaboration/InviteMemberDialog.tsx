@@ -17,7 +17,7 @@ import { RoleBadge } from "./RoleBadge";
 import { useRoles } from "@/hooks/useRoles";
 import { useCreateProjectInvitation } from "@/hooks/useProjectInvitations";
 import { useNotifications } from "@/context/NotificationContext";
-import type { ProjectInvitation } from "@/types/collaboration";
+import type { InvitationIdentifierType, ProjectInvitation } from "@/types/collaboration";
 
 interface InviteMemberDialogProps {
   projectId: string;
@@ -40,6 +40,7 @@ const EXPIRY_OPTIONS = [
  * immediately; the same link is still always available later from
  * InvitationRow / InvitationDetailsDialog's "Copy invite link". */
 export function InviteMemberDialog({ projectId, open, onOpenChange }: InviteMemberDialogProps) {
+  const [identifierType, setIdentifierType] = useState<InvitationIdentifierType>("email");
   const [email, setEmail] = useState("");
   const [roleId, setRoleId] = useState<string>("none");
   const [expiryDays, setExpiryDays] = useState("7");
@@ -50,7 +51,17 @@ export function InviteMemberDialog({ projectId, open, onOpenChange }: InviteMemb
 
   const assignableRoles = (roles ?? []).filter((r) => r.name !== "Owner");
 
+  // Keeps the input's own validation in sync with the dropdown: an
+  // email needs the basic "@" shape, a username just needs to be
+  // non-empty. Mirrors the backend's identifier_type-aware validator
+  // in schemas.ProjectInvitationBase, so bad input is caught here
+  // before the request round-trips.
+  const trimmedIdentifier = email.trim();
+  const isIdentifierValid =
+    identifierType === "email" ? trimmedIdentifier.length >= 3 && trimmedIdentifier.includes("@") : trimmedIdentifier.length >= 1;
+
   function reset() {
+    setIdentifierType("email");
     setEmail("");
     setRoleId("none");
     setExpiryDays("7");
@@ -59,10 +70,11 @@ export function InviteMemberDialog({ projectId, open, onOpenChange }: InviteMemb
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim()) return;
+    if (!isIdentifierValid) return;
     createInvitation.mutate(
       {
-        email: email.trim(),
+        email: trimmedIdentifier,
+        identifier_type: identifierType,
         role_id: roleId === "none" ? null : roleId,
         expires_at: formatISO(addDays(new Date(), Number(expiryDays))),
       },
@@ -138,21 +150,37 @@ export function InviteMemberDialog({ projectId, open, onOpenChange }: InviteMemb
                 <Mail className="h-4 w-4 text-primary" /> Invite a member
               </DialogTitle>
               <DialogDescription>
-                They must already have an account -- enter their registered email or username. They'll get an
-                in-app notification, and you'll get a shareable link to send them too -- no email is sent
-                automatically.
+                They must already have an account -- choose whether to look them up by email or username, then
+                enter it. They'll get an in-app notification, and you'll get a shareable link to send them too --
+                no email is sent automatically.
               </DialogDescription>
             </DialogHeader>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="invite-email">Email or username</Label>
+                <Label htmlFor="invite-identifier-type">Invite by</Label>
+                <Select
+                  value={identifierType}
+                  onValueChange={(value) => setIdentifierType(value as InvitationIdentifierType)}
+                >
+                  <SelectTrigger id="invite-identifier-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="username">Username</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="invite-email">{identifierType === "email" ? "Email" : "Username"}</Label>
                 <Input
                   id="invite-email"
-                  type="text"
+                  type={identifierType === "email" ? "email" : "text"}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="teammate@example.com or username"
+                  placeholder={identifierType === "email" ? "teammate@example.com" : "username"}
                   autoFocus
                   required
                 />
@@ -202,7 +230,7 @@ export function InviteMemberDialog({ projectId, open, onOpenChange }: InviteMemb
                 <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createInvitation.isPending || !email.trim()}>
+                <Button type="submit" disabled={createInvitation.isPending || !isIdentifierValid}>
                   {createInvitation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Send invitation
                 </Button>
