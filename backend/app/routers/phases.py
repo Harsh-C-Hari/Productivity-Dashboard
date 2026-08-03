@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..project_helpers import log_timeline_event
@@ -113,7 +114,7 @@ def update_phase(phase_id: str, payload: schemas.ProjectPhaseUpdate, current_use
 
     if phase.status == models.PhaseStatus.completed:
         phase.progress = 100
-    phase.updated_at = datetime.utcnow()
+    phase.updated_at = utc_now()
     db.commit()
     db.refresh(phase)
 
@@ -145,7 +146,7 @@ def reorder_phases(items: List[ReorderItem], current_user: models.User = Depends
             raise HTTPException(status_code=404, detail=f"Phase {item.id} not found")
         require_project_access(db, current_user, phase.project_id, "manage_tasks")
         phase.order_index = item.order_index
-        phase.updated_at = datetime.utcnow()
+        phase.updated_at = utc_now()
         phases.append(phase)
     db.commit()
     for phase in phases:

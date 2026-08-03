@@ -26,6 +26,8 @@ from datetime import datetime, timedelta
 import jwt
 from passlib.context import CryptContext
 
+from .timeutils import utc_now
+
 # ======================================================================
 # Configuration
 #
@@ -98,7 +100,7 @@ def validate_password_strength(password: str) -> None:
 # ======================================================================
 
 def create_access_token(user_id: str, session_id: str) -> str:
-    now = datetime.utcnow()
+    now = utc_now()
     payload = {
         "sub": user_id,
         "sid": session_id,
@@ -147,5 +149,5 @@ def new_refresh_token() -> tuple[str, str, datetime]:
     returned to the client exactly once and never persisted; only the
     hash is stored on the Session row."""
     raw = generate_opaque_token(48)
-    expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    expires_at = utc_now() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     return raw, hash_token(raw), expires_at

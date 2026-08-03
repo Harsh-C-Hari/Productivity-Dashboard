@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity_event
 from ..auth_dependencies import require_membership, require_permission
@@ -51,7 +52,7 @@ def _resolve_expiry(db: Session, invitation: models.ProjectInvitation) -> models
     require a background job to be considered complete, mirroring how
     the rest of this app computes derived state on the fly (e.g.
     `urgency.py`) rather than via a scheduler."""
-    if invitation.status == models.InvitationStatus.pending and invitation.expires_at < datetime.utcnow():
+    if invitation.status == models.InvitationStatus.pending and invitation.expires_at < utc_now():
         invitation.status = models.InvitationStatus.expired
         db.commit()
         db.refresh(invitation)
@@ -253,7 +254,7 @@ def resend_invitation(
 
     invitation.token = secrets.token_urlsafe(32)
     invitation.status = models.InvitationStatus.pending
-    invitation.expires_at = datetime.utcnow() + window
+    invitation.expires_at = utc_now() + window
     invitation.accepted_at = None
     invitation.rejected_at = None
     db.commit()
@@ -375,7 +376,7 @@ def accept_invitation(token: str, display_name: str = Query(default=""), db: Ses
         db.add(membership)
 
     invitation.status = models.InvitationStatus.accepted
-    invitation.accepted_at = datetime.utcnow()
+    invitation.accepted_at = utc_now()
     db.commit()
     db.refresh(membership)
 
@@ -421,7 +422,7 @@ def reject_invitation(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail=f"This invitation is {invitation.status.value} and can no longer be rejected")
 
     invitation.status = models.InvitationStatus.rejected
-    invitation.rejected_at = datetime.utcnow()
+    invitation.rejected_at = utc_now()
     db.commit()
     db.refresh(invitation)
 

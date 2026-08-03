@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import models
 from .database import engine, SessionLocal, run_startup_migrations
+from .timeutils import utc_now
 from .uploads import UPLOAD_DIR, ensure_upload_dir
 from .routers import (
     tasks,
@@ -168,7 +169,7 @@ def _seed_if_empty():
         if db.query(models.Task).count() > 0:
             return
 
-        now = datetime.utcnow()
+        now = utc_now()
 
         sample_tasks = [
             models.Task(
@@ -266,7 +267,7 @@ def _seed_study_hub_if_empty():
         if db.query(models.Subject).count() > 0:
             return
 
-        now = datetime.utcnow()
+        now = utc_now()
 
         dsa = models.Subject(name="Data Structures & Algorithms", code="CS 301", instructor="Dr. Chen", color="purple")
         db_sys = models.Subject(name="Database Systems", code="CS 340", instructor="Dr. Patel", color="cyan")

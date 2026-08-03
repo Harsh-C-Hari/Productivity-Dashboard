@@ -19,6 +19,7 @@ from .. import models, schemas
 from ..activity_log import log_activity_event
 from ..auth_dependencies import get_current_user, get_current_user_and_session
 from ..database import get_db
+from ..timeutils import utc_now
 
 router = APIRouter(prefix="/api/auth/sessions", tags=["sessions"])
 
@@ -56,7 +57,7 @@ def list_sessions(
 @router.get("/current", response_model=schemas.SessionWithCurrentOut)
 def get_current_session(user_and_session: tuple = Depends(get_current_user_and_session)):
     _current_user, current_session = user_and_session
-    current_session.last_active_at = datetime.utcnow()
+    current_session.last_active_at = utc_now()
     return _serialize(current_session, current_session.id)
 
 

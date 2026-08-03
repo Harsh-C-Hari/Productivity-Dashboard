@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..auth_dependencies import get_current_user
 from ..project_helpers import get_accessible_project_ids
@@ -33,7 +34,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 @router.get("", response_model=schemas.DashboardOut)
 def get_dashboard(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    now = datetime.utcnow()
+    now = utc_now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
     week_end = today_start + timedelta(days=7)

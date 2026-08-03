@@ -14,6 +14,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..urgency import compute_urgency
 from ..activity_log import log_activity
@@ -142,7 +143,7 @@ def update_feature(feature_id: str, payload: schemas.FeatureUpdate, current_user
     if feature.progress == 100 and feature.status != models.FeatureStatus.done:
         feature.status = models.FeatureStatus.done
 
-    feature.updated_at = datetime.utcnow()
+    feature.updated_at = utc_now()
     db.commit()
     db.refresh(feature)
 

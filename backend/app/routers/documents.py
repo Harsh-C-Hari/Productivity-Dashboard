@@ -12,6 +12,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..project_helpers import log_timeline_event
@@ -79,7 +80,7 @@ def update_document(document_id: str, payload: schemas.ProjectDocumentUpdate, cu
     require_project_access(db, current_user, document.project_id, "manage_documents")
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(document, field, value)
-    document.updated_at = datetime.utcnow()
+    document.updated_at = utc_now()
     db.commit()
     db.refresh(document)
     log_activity(db, f'Updated document "{document.title}"', icon="pencil")

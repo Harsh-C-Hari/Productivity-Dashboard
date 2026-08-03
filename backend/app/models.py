@@ -54,18 +54,52 @@ backend foundation only -- see AI_HANDOFF.md for router/frontend status):
 """
 import enum
 import uuid
-from datetime import datetime
+from datetime import timezone
 
 from sqlalchemy import (
     Column, String, Text, DateTime, Float, Integer, Boolean, ForeignKey,
     Enum as SAEnum, UniqueConstraint,
 )
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import relationship
 from .database import Base
+from .timeutils import utc_now
 
 
 def gen_id() -> str:
     return uuid.uuid4().hex[:12]
+
+
+class UTCDateTime(TypeDecorator):
+    """DateTime column that is naive (UTC) at rest -- SQLite has no
+    real timezone support -- but always timezone-*aware* (UTC) once it
+    reaches Python/Pydantic. See timeutils.py for the full story on
+    why this is the fix for the app-wide relative-timestamp offset.
+
+    This is the ONE place that change is made: every model column
+    below uses this type instead of plain `DateTime`, so every
+    Pydantic schema and every API response automatically gets a
+    correctly UTC-labeled timestamp, with no per-router or per-page
+    changes required.
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        # Everything in this column is UTC by construction (see
+        # process_bind_param and every `default=utc_now` below), so
+        # it's safe to always label rows coming back out as UTC.
+        return value.replace(tzinfo=timezone.utc)
 
 
 class TaskStatus(str, enum.Enum):
@@ -98,13 +132,13 @@ class Task(Base):
     title = Column(String(200), nullable=False)
     description = Column(Text, default="")
     category = Column(SAEnum(TaskCategory), default=TaskCategory.other, nullable=False)
-    deadline = Column(DateTime, nullable=True)
+    deadline = Column(UTCDateTime, nullable=True)
     estimated_effort_hours = Column(Float, default=1.0)  # hours of work estimated
     status = Column(SAEnum(TaskStatus), default=TaskStatus.todo, nullable=False)
     progress = Column(Integer, default=0)  # 0-100
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
+    completed_at = Column(UTCDateTime, nullable=True)
     # Placeholder for future file-attachment support. Stored as a
     # comma-separated list of filenames for the MVP.
     attachments = Column(Text, default="")
@@ -131,7 +165,7 @@ class TimetableSlot(Base):
     start_time = Column(String(5), nullable=False)  # "HH:MM" 24h
     end_time = Column(String(5), nullable=False)  # "HH:MM" 24h
     color = Column(String(20), default="purple")  # theme accent tag
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
 
 
 class ActivityLog(Base):
@@ -148,7 +182,7 @@ class ActivityLog(Base):
     id = Column(String, primary_key=True, default=gen_id)
     message = Column(String(300), nullable=False)
     icon = Column(String(30), default="activity")
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(UTCDateTime, default=utc_now, index=True)
 
     # ---- Collaboration/audit extension (additive) ----
     user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -179,7 +213,7 @@ class Subject(Base):
     code = Column(String(40), default="")  # e.g. "CS 301"
     instructor = Column(String(120), default="")
     color = Column(String(20), default="purple")  # theme accent tag, matches timetable colors
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
 
 
 class Topic(Base):
@@ -191,7 +225,7 @@ class Topic(Base):
     subject_id = Column(String, ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False)
     title = Column(String(200), nullable=False)
     order_index = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
 
 
 class AssignmentStatus(str, enum.Enum):
@@ -212,13 +246,13 @@ class Assignment(Base):
     topic_id = Column(String, ForeignKey("topics.id", ondelete="SET NULL"), nullable=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, default="")
-    deadline = Column(DateTime, nullable=True)
+    deadline = Column(UTCDateTime, nullable=True)
     estimated_effort_hours = Column(Float, default=1.0)
     status = Column(SAEnum(AssignmentStatus), default=AssignmentStatus.todo, nullable=False)
     progress = Column(Integer, default=0)  # 0-100
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
+    completed_at = Column(UTCDateTime, nullable=True)
     # JSON-encoded list of {filename, original_name, url, size_bytes, content_type}
     attachments = Column(Text, default="[]")
 
@@ -235,8 +269,8 @@ class Note(Base):
     title = Column(String(200), nullable=False)
     content = Column(Text, default="")
     attachments = Column(Text, default="[]")  # same shape as Assignment.attachments
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
 
 class ResourceType(str, enum.Enum):
@@ -265,7 +299,7 @@ class Resource(Base):
     file_path = Column(String(500), nullable=True)  # public URL path, e.g. /uploads/xyz.pdf
     file_size_bytes = Column(Integer, nullable=True)
     external_url = Column(String(1000), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
 
 
 class StudySessionType(str, enum.Enum):
@@ -288,11 +322,11 @@ class StudySession(Base):
     subject_id = Column(String, ForeignKey("subjects.id", ondelete="SET NULL"), nullable=True)
     assignment_id = Column(String, ForeignKey("assignments.id", ondelete="SET NULL"), nullable=True)
     session_type = Column(SAEnum(StudySessionType), default=StudySessionType.pomodoro, nullable=False)
-    started_at = Column(DateTime, default=datetime.utcnow)
-    ended_at = Column(DateTime, nullable=True)
+    started_at = Column(UTCDateTime, default=utc_now)
+    ended_at = Column(UTCDateTime, nullable=True)
     duration_minutes = Column(Integer, default=0)  # finalized once the session ends
     notes = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
 
 
 # ======================================================================
@@ -410,8 +444,8 @@ class Project(Base):
     progress = Column(Integer, default=0)  # 0-100, rolled up from phases/features
     archived = Column(Boolean, default=False, nullable=False, index=True)
     tags = Column(Text, default="[]")  # JSON-encoded list[str], same convention as attachments columns
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     # ---- Collaboration-readiness (additive; see the "Collaboration &
     # Identity" section near the bottom of this file). All nullable/
@@ -502,8 +536,8 @@ class ProjectPhase(Base):
     order_index = Column(Integer, default=0, index=True)
     status = Column(SAEnum(PhaseStatus), default=PhaseStatus.pending, nullable=False, index=True)
     progress = Column(Integer, default=0)  # 0-100
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     project = relationship("Project", back_populates="phases")
     features = relationship("Feature", back_populates="phase")
@@ -528,8 +562,8 @@ class Feature(Base):
     priority = Column(SAEnum(Priority), default=Priority.medium, nullable=False, index=True)
     estimated_effort_hours = Column(Float, default=1.0)
     progress = Column(Integer, default=0)  # 0-100
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     project = relationship("Project", back_populates="features")
     phase = relationship("ProjectPhase", back_populates="features")
@@ -551,12 +585,12 @@ class ProjectTodo(Base):
     title = Column(String(200), nullable=False)
     description = Column(Text, default="")
     status = Column(SAEnum(TaskStatus), default=TaskStatus.todo, nullable=False, index=True)
-    deadline = Column(DateTime, nullable=True, index=True)  # feeds the Smart Urgency Engine
+    deadline = Column(UTCDateTime, nullable=True, index=True)  # feeds the Smart Urgency Engine
     estimated_effort_hours = Column(Float, default=1.0)  # feeds the Smart Urgency Engine
     progress = Column(Integer, default=0)  # 0-100
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
+    completed_at = Column(UTCDateTime, nullable=True)
 
     project = relationship("Project", back_populates="todos")
     phase = relationship("ProjectPhase", back_populates="todos")
@@ -577,9 +611,9 @@ class Bug(Base):
     severity = Column(SAEnum(BugSeverity), default=BugSeverity.medium, nullable=False, index=True)
     status = Column(SAEnum(BugStatus), default=BugStatus.open, nullable=False, index=True)
     resolution = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    resolved_at = Column(DateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
+    resolved_at = Column(UTCDateTime, nullable=True)
 
     project = relationship("Project", back_populates="bugs")
     phase = relationship("ProjectPhase", back_populates="bugs")
@@ -595,11 +629,11 @@ class Milestone(Base):
     phase_id = Column(String, ForeignKey("project_phases.id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, default="")
-    target_date = Column(DateTime, nullable=True, index=True)
+    target_date = Column(UTCDateTime, nullable=True, index=True)
     completed = Column(Boolean, default=False, nullable=False, index=True)
-    completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    completed_at = Column(UTCDateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     project = relationship("Project", back_populates="milestones")
     phase = relationship("ProjectPhase", back_populates="milestones")
@@ -621,7 +655,7 @@ class ProjectResource(Base):
     file_path = Column(String(500), nullable=True)  # public URL path, e.g. /uploads/xyz.pdf
     file_size_bytes = Column(Integer, nullable=True)
     external_url = Column(String(1000), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
 
     project = relationship("Project", back_populates="resources")
 
@@ -637,8 +671,8 @@ class ProjectDocument(Base):
     title = Column(String(200), nullable=False)
     content = Column(Text, default="")  # markdown
     order_index = Column(Integer, default=0, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     project = relationship("Project", back_populates="documents")
 
@@ -660,7 +694,7 @@ class TimelineEvent(Base):
     icon = Column(String(30), default="activity")
     related_entity_type = Column(String(50), nullable=True)  # e.g. "feature", "bug", "milestone", "todo"
     related_entity_id = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(UTCDateTime, default=utc_now, index=True)
 
     project = relationship("Project", back_populates="timeline_events")
 
@@ -741,8 +775,8 @@ class AIAccount(Base):
     # key itself. See module-level "Security" note above.
     api_key_env_var = Column(String(100), default="")
     current_task = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     conversations = relationship(
         "Conversation", back_populates="ai_account",
@@ -772,10 +806,10 @@ class Conversation(Base):
     summary = Column(Text, default="")
     status = Column(SAEnum(ConversationStatus), default=ConversationStatus.active, nullable=False, index=True)
     message_count = Column(Integer, default=0)
-    started_at = Column(DateTime, default=datetime.utcnow, index=True)
-    last_message_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    started_at = Column(UTCDateTime, default=utc_now, index=True)
+    last_message_at = Column(UTCDateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     ai_account = relationship("AIAccount", back_populates="conversations")
     project = relationship("Project", back_populates="ai_conversations")
@@ -805,8 +839,8 @@ class PromptTemplate(Base):
     # Project.tags.
     variables = Column(Text, default="[]")
     usage_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
 
 class ProjectZip(Base):
@@ -829,7 +863,7 @@ class ProjectZip(Base):
     file_path = Column(String(500), nullable=True)  # public URL path, e.g. /uploads/xyz.zip
     file_size_bytes = Column(Integer, nullable=True)
     notes = Column(Text, default="")  # what changed in this snapshot
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(UTCDateTime, default=utc_now, index=True)
 
     project = relationship("Project", back_populates="ai_zips")
     ai_account = relationship("AIAccount", back_populates="zips")
@@ -856,7 +890,7 @@ class AIHandoff(Base):
     remaining_work = Column(Text, default="")
     known_issues = Column(Text, default="")
     next_objective = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(UTCDateTime, default=utc_now, index=True)
 
     project = relationship("Project", back_populates="ai_handoffs")
     ai_account = relationship("AIAccount", back_populates="handoffs")
@@ -880,7 +914,7 @@ class TokenTracker(Base):
     total_tokens = Column(Integer, default=0)
     estimated_cost_usd = Column(Float, default=0.0)
     model = Column(String(100), default="")
-    recorded_at = Column(DateTime, default=datetime.utcnow, index=True)
+    recorded_at = Column(UTCDateTime, default=utc_now, index=True)
 
     ai_account = relationship("AIAccount", back_populates="token_trackers")
     conversation = relationship("Conversation", back_populates="token_trackers")
@@ -906,8 +940,8 @@ class KnowledgeArticle(Base):
     category = Column(String(60), default="general", index=True)
     tags = Column(Text, default="[]")  # JSON-encoded list[str], same convention as Project.tags
     source = Column(SAEnum(KnowledgeSource), default=KnowledgeSource.manual, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     project = relationship("Project", back_populates="knowledge_articles")
 
@@ -1001,9 +1035,9 @@ class User(Base):
     locale = Column(String(10), default="en")
     theme = Column(String(20), default="dark")  # matches the app's default dark/glassmorphism theme
     status = Column(SAEnum(UserStatus), default=UserStatus.active, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    last_seen_at = Column(DateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
+    last_seen_at = Column(UTCDateTime, nullable=True)
 
     # ---- Authentication metadata ----
     auth_provider = Column(SAEnum(AuthProvider), default=AuthProvider.local, nullable=False, index=True)
@@ -1019,9 +1053,9 @@ class User(Base):
     # Preparation" wording (prepare the mechanism, not the email).
     email_verified = Column(Boolean, default=False, nullable=False)
     email_verification_token = Column(String(64), nullable=True, unique=True, index=True)
-    email_verification_expires_at = Column(DateTime, nullable=True)
+    email_verification_expires_at = Column(UTCDateTime, nullable=True)
     password_reset_token = Column(String(64), nullable=True, unique=True, index=True)
-    password_reset_expires_at = Column(DateTime, nullable=True)
+    password_reset_expires_at = Column(UTCDateTime, nullable=True)
 
     owned_projects = relationship("Project", back_populates="owner", foreign_keys="Project.owner_id")
     project_memberships = relationship(
@@ -1064,7 +1098,7 @@ class Permission(Base):
     name = Column(String(120), nullable=False)
     description = Column(Text, default="")
     category = Column(String(50), default="general", index=True)  # e.g. "project", "members", "tasks", "ai_workspace"
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
 
 
 class Role(Base):
@@ -1084,8 +1118,8 @@ class Role(Base):
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
     # JSON-encoded list[str] of Permission.key values -- see module note above.
     permission_keys = Column(Text, default="[]")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     project = relationship("Project")
 
@@ -1108,8 +1142,8 @@ class ProjectMember(Base):
     # top of the role -- future-ready, unused until a permission-check
     # service exists.
     permission_overrides = Column(Text, default="[]")
-    joined_at = Column(DateTime, default=datetime.utcnow)
-    last_active_at = Column(DateTime, nullable=True)
+    joined_at = Column(UTCDateTime, default=utc_now)
+    last_active_at = Column(UTCDateTime, nullable=True)
 
     project = relationship("Project", back_populates="members")
     user = relationship("User", back_populates="project_memberships")
@@ -1130,10 +1164,10 @@ class ProjectInvitation(Base):
     invited_by_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     token = Column(String(64), unique=True, nullable=False, index=True)
     status = Column(SAEnum(InvitationStatus), default=InvitationStatus.pending, nullable=False, index=True)
-    expires_at = Column(DateTime, nullable=False, index=True)
-    accepted_at = Column(DateTime, nullable=True)
-    rejected_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(UTCDateTime, nullable=False, index=True)
+    accepted_at = Column(UTCDateTime, nullable=True)
+    rejected_at = Column(UTCDateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now)
 
     project = relationship("Project", back_populates="invitations")
     role = relationship("Role")
@@ -1157,9 +1191,9 @@ class Session(Base):
     platform = Column(String(60), default="")  # e.g. "macOS", "iOS", "Windows"
     browser = Column(String(60), default="")  # e.g. "Chrome 126"
     ip_address = Column(String(45), nullable=True)  # nullable; long enough for IPv6
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    last_active_at = Column(DateTime, nullable=True)
-    expires_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(UTCDateTime, default=utc_now, index=True)
+    last_active_at = Column(UTCDateTime, nullable=True)
+    expires_at = Column(UTCDateTime, nullable=False, index=True)
     revoked = Column(Boolean, default=False, nullable=False, index=True)
     # Future refresh-token metadata -- stores a hash, never the raw token.
     refresh_token_hash = Column(Text, nullable=True)
@@ -1185,8 +1219,8 @@ class UserPreference(Base):
     dashboard_layout = Column(Text, default="{}")
     default_project_id = Column(String, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
     ai_preferences = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     user = relationship("User", back_populates="preferences")
     default_project = relationship("Project")
@@ -1210,8 +1244,8 @@ class NotificationPreference(Base):
     # JSON-encoded dict for future channels/reminder timing, same
     # convention as UserPreference.dashboard_layout above.
     reminder_preferences = Column(Text, default="{}")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=utc_now)
+    updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
     user = relationship("User", back_populates="notification_preferences")
 
@@ -1259,8 +1293,8 @@ class Notification(Base):
     invitation_id = Column(String, ForeignKey("project_invitations.id", ondelete="SET NULL"), nullable=True, index=True)
     action_url = Column(String(500), default="")  # client-side route to deep-link to, e.g. /invite/{token}
     is_read = Column(Boolean, default=False, nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    read_at = Column(DateTime, nullable=True)
+    created_at = Column(UTCDateTime, default=utc_now, index=True)
+    read_at = Column(UTCDateTime, nullable=True)
 
     user = relationship("User", back_populates="notifications")
     project = relationship("Project")

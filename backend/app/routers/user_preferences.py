@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..auth_dependencies import get_current_user
 
@@ -94,7 +95,7 @@ def update_preferences(user_id: str, payload: schemas.UserPreferenceUpdate, db: 
         setattr(pref, field, value)
 
     import datetime as _dt
-    pref.updated_at = _dt.datetime.utcnow()
+    pref.updated_at = _dt.utc_now()
     db.commit()
     db.refresh(pref)
     return serialize_preferences(pref)

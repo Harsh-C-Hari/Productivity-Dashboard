@@ -17,6 +17,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
+from .timeutils import utc_now
+
 
 class Urgency(str, Enum):
     critical = "critical"
@@ -43,7 +45,7 @@ def compute_urgency(
             return Urgency.medium.value
         return Urgency.low.value
 
-    now = now or datetime.utcnow()
+    now = now or utc_now()
     remaining_hours = (deadline - now).total_seconds() / 3600.0
 
     if remaining_hours <= 0:

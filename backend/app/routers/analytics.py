@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..auth_dependencies import get_current_user, require_permission
 from ..project_helpers import get_accessible_project_ids
@@ -34,7 +35,7 @@ def _build_velocity(
     bugs: List[models.Bug],
     milestones: List[models.Milestone],
 ) -> List[schemas.VelocityPoint]:
-    now = datetime.utcnow()
+    now = utc_now()
     current_week_start = _week_start(now)
     window_start = current_week_start - timedelta(weeks=WEEKS_OF_VELOCITY - 1)
 
@@ -68,7 +69,7 @@ def _build_velocity(
 
 
 def build_project_analytics(db: Session, project: models.Project) -> schemas.ProjectAnalytics:
-    now = datetime.utcnow()
+    now = utc_now()
 
     phases = db.query(models.ProjectPhase).filter(models.ProjectPhase.project_id == project.id).all()
     features = db.query(models.Feature).filter(models.Feature.project_id == project.id).all()

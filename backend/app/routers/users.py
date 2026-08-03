@@ -18,6 +18,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..auth_dependencies import get_current_user
 
@@ -130,7 +131,7 @@ def update_user(user_id: str, payload: schemas.UserUpdate, db: Session = Depends
         setattr(user, field, value)
 
     import datetime as _dt
-    user.updated_at = _dt.datetime.utcnow()
+    user.updated_at = _dt.utc_now()
     db.commit()
     db.refresh(user)
     return schemas.UserOut.model_validate(user)

@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..urgency import compute_urgency
 from ..activity_log import log_activity
@@ -166,15 +167,15 @@ def update_assignment(
     if assignment.status == models.AssignmentStatus.done:
         assignment.progress = 100
         if not was_done:
-            assignment.completed_at = datetime.utcnow()
+            assignment.completed_at = utc_now()
     elif was_done and assignment.status != models.AssignmentStatus.done:
         assignment.completed_at = None
 
     if assignment.progress == 100 and assignment.status != models.AssignmentStatus.done:
         assignment.status = models.AssignmentStatus.done
-        assignment.completed_at = datetime.utcnow()
+        assignment.completed_at = utc_now()
 
-    assignment.updated_at = datetime.utcnow()
+    assignment.updated_at = utc_now()
     db.commit()
     db.refresh(assignment)
 
@@ -221,7 +222,7 @@ async def upload_assignment_attachment(
     attachments = json.loads(assignment.attachments or "[]")
     attachments.append(meta)
     assignment.attachments = json.dumps(attachments)
-    assignment.updated_at = datetime.utcnow()
+    assignment.updated_at = utc_now()
     db.commit()
     db.refresh(assignment)
 
@@ -246,7 +247,7 @@ def delete_assignment_attachment(
 
     delete_upload(filename)
     assignment.attachments = json.dumps(remaining)
-    assignment.updated_at = datetime.utcnow()
+    assignment.updated_at = utc_now()
     db.commit()
     db.refresh(assignment)
 

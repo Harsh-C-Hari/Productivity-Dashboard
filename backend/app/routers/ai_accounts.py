@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..auth_dependencies import get_current_user
@@ -146,7 +147,7 @@ def touch_ai_account(account_id: str, db: Session = Depends(get_db), current_use
     "most recently used" sorting/default-selection UI can rely on it
     without needing a dedicated last_used_at column."""
     account = get_account_or_404(db, account_id, current_user.id)
-    account.updated_at = datetime.utcnow()
+    account.updated_at = utc_now()
     db.commit()
     db.refresh(account)
     return serialize_account(account)

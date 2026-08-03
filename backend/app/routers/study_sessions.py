@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..auth_dependencies import get_current_user
@@ -77,7 +78,7 @@ def start_session(
         if not assignment:
             raise HTTPException(status_code=404, detail="Assignment not found")
 
-    session = models.StudySession(**payload.model_dump(), user_id=current_user.id, started_at=datetime.utcnow())
+    session = models.StudySession(**payload.model_dump(), user_id=current_user.id, started_at=utc_now())
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -102,7 +103,7 @@ def update_session(
         setattr(session, field, value)
 
     if complete_now and not session.ended_at:
-        session.ended_at = datetime.utcnow()
+        session.ended_at = utc_now()
 
     if session.ended_at and not data.get("duration_minutes"):
         elapsed = (session.ended_at - session.started_at).total_seconds() / 60

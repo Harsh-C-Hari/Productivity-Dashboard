@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..urgency import compute_urgency
 from ..auth_dependencies import get_current_user
@@ -100,15 +101,15 @@ def update_task(
     if task.status == models.TaskStatus.done:
         task.progress = 100
         if not was_done:
-            task.completed_at = datetime.utcnow()
+            task.completed_at = utc_now()
     elif was_done and task.status != models.TaskStatus.done:
         task.completed_at = None
 
     if task.progress == 100 and task.status != models.TaskStatus.done:
         task.status = models.TaskStatus.done
-        task.completed_at = datetime.utcnow()
+        task.completed_at = utc_now()
 
-    task.updated_at = datetime.utcnow()
+    task.updated_at = utc_now()
     db.commit()
     db.refresh(task)
 

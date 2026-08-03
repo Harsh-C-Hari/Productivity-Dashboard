@@ -12,6 +12,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..project_helpers import log_timeline_event, get_accessible_project_ids
@@ -161,11 +162,11 @@ def update_bug(bug_id: str, payload: schemas.BugUpdate, current_user: models.Use
         bug.feature_id = None
 
     if bug.status == models.BugStatus.resolved and not was_resolved:
-        bug.resolved_at = datetime.utcnow()
+        bug.resolved_at = utc_now()
     elif was_resolved and bug.status != models.BugStatus.resolved:
         bug.resolved_at = None
 
-    bug.updated_at = datetime.utcnow()
+    bug.updated_at = utc_now()
     db.commit()
     db.refresh(bug)
 

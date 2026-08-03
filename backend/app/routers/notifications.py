@@ -13,6 +13,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..auth_dependencies import get_current_user
 
@@ -86,7 +87,7 @@ def mark_read(
     notification = _get_owned_notification_or_404(db, current_user, notification_id)
     if not notification.is_read:
         notification.is_read = True
-        notification.read_at = datetime.utcnow()
+        notification.read_at = utc_now()
         db.commit()
         db.refresh(notification)
     return serialize_notification(notification)
@@ -109,7 +110,7 @@ def mark_unread(
 
 @router.post("/mark-all-read", response_model=schemas.NotificationCounts)
 def mark_all_read(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    now = datetime.utcnow()
+    now = utc_now()
     (
         db.query(models.Notification)
         .filter(models.Notification.user_id == current_user.id, models.Notification.is_read.is_(False))

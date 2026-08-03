@@ -23,6 +23,7 @@ from .. import models, schemas
 from ..activity_log import log_activity_event
 from ..auth_dependencies import get_current_user, get_current_user_and_session, get_current_user_optional
 from ..database import get_db
+from ..timeutils import utc_now
 from ..security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     EMAIL_VERIFICATION_EXPIRE_HOURS,
@@ -63,7 +64,7 @@ def _issue_tokens(
         browser=browser,
         expires_at=refresh_expires_at,
         refresh_token_hash=refresh_hash,
-        last_active_at=datetime.utcnow(),
+        last_active_at=utc_now(),
     )
     db.add(session)
     db.commit()
@@ -148,7 +149,7 @@ def login(payload: schemas.LoginRequest, db: DBSession = Depends(get_db)):
     if user.auth_provider != models.AuthProvider.local:
         raise HTTPException(status_code=400, detail=f"This account signs in via {user.auth_provider.value}, not a password")
 
-    user.last_seen_at = datetime.utcnow()
+    user.last_seen_at = utc_now()
     if user.status == models.UserStatus.invited:
         # First real login of a User row that was created ahead of time
         # by a ProjectInvitation accept (see project_helpers.get_or_create_user_by_email).
@@ -209,7 +210,7 @@ def refresh_token(payload: schemas.RefreshRequest, db: DBSession = Depends(get_d
     token_hash = hash_token(payload.refresh_token)
     session = db.query(models.Session).filter(models.Session.refresh_token_hash == token_hash).first()
 
-    if not session or session.revoked or session.expires_at < datetime.utcnow():
+    if not session or session.revoked or session.expires_at < utc_now():
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     user = db.query(models.User).filter(models.User.id == session.user_id).first()
@@ -219,7 +220,7 @@ def refresh_token(payload: schemas.RefreshRequest, db: DBSession = Depends(get_d
     raw_refresh, refresh_hash, refresh_expires_at = new_refresh_token()
     session.refresh_token_hash = refresh_hash
     session.expires_at = refresh_expires_at
-    session.last_active_at = datetime.utcnow()
+    session.last_active_at = utc_now()
     db.commit()
 
     access_token = create_access_token(user.id, session.id)
@@ -285,7 +286,7 @@ def update_profile(
     data = payload.model_dump(exclude_unset=True)
     for field, value in data.items():
         setattr(current_user, field, value)
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     db.commit()
     db.refresh(current_user)
 
@@ -308,7 +309,7 @@ def update_avatar(
     db: DBSession = Depends(get_db),
 ):
     current_user.avatar_url = payload.avatar_url
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     db.commit()
     db.refresh(current_user)
     log_activity_event(
@@ -330,7 +331,7 @@ def update_display_name(
     db: DBSession = Depends(get_db),
 ):
     current_user.display_name = payload.display_name
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     db.commit()
     db.refresh(current_user)
     log_activity_event(
@@ -364,7 +365,7 @@ def update_email(
 
     current_user.email = payload.email
     current_user.email_verified = False
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     db.commit()
     db.refresh(current_user)
 
@@ -397,7 +398,7 @@ def deactivate_account(
         raise HTTPException(status_code=401, detail="Incorrect password")
 
     current_user.status = models.UserStatus.deactivated
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     db.query(models.Session).filter(models.Session.user_id == current_user.id, models.Session.revoked.is_(False)).update(
         {"revoked": True}
     )
@@ -434,7 +435,7 @@ def change_password(
         raise HTTPException(status_code=422, detail=str(exc))
 
     current_user.password_hash = hash_password(payload.new_password)
-    current_user.updated_at = datetime.utcnow()
+    current_user.updated_at = utc_now()
     # Revoking every session forces re-login everywhere after a password
     # change, the standard defense against "attacker already has a live
     # session using the old password."
@@ -479,7 +480,7 @@ def request_password_reset(payload: schemas.PasswordResetRequest, db: DBSession 
     if user and user.auth_provider == models.AuthProvider.local:
         token = generate_opaque_token(32)
         user.password_reset_token = token
-        user.password_reset_expires_at = datetime.utcnow() + timedelta(minutes=PASSWORD_RESET_EXPIRE_MINUTES)
+        user.password_reset_expires_at = utc_now() + timedelta(minutes=PASSWORD_RESET_EXPIRE_MINUTES)
         db.commit()
         log_activity_event(
             db,
@@ -499,7 +500,7 @@ def request_password_reset(payload: schemas.PasswordResetRequest, db: DBSession 
 @router.post("/password-reset/confirm", status_code=204)
 def confirm_password_reset(payload: schemas.PasswordResetConfirm, db: DBSession = Depends(get_db)):
     user = db.query(models.User).filter(models.User.password_reset_token == payload.token).first()
-    if not user or not user.password_reset_expires_at or user.password_reset_expires_at < datetime.utcnow():
+    if not user or not user.password_reset_expires_at or user.password_reset_expires_at < utc_now():
         raise HTTPException(status_code=400, detail="Invalid or expired password reset token")
 
     try:
@@ -510,7 +511,7 @@ def confirm_password_reset(payload: schemas.PasswordResetConfirm, db: DBSession 
     user.password_hash = hash_password(payload.new_password)
     user.password_reset_token = None
     user.password_reset_expires_at = None
-    user.updated_at = datetime.utcnow()
+    user.updated_at = utc_now()
     db.query(models.Session).filter(models.Session.user_id == user.id, models.Session.revoked.is_(False)).update(
         {"revoked": True}
     )
@@ -544,7 +545,7 @@ def request_email_verification(
 
     token = generate_opaque_token(32)
     current_user.email_verification_token = token
-    current_user.email_verification_expires_at = datetime.utcnow() + timedelta(hours=EMAIL_VERIFICATION_EXPIRE_HOURS)
+    current_user.email_verification_expires_at = utc_now() + timedelta(hours=EMAIL_VERIFICATION_EXPIRE_HOURS)
     db.commit()
 
     debug_token = token if os.environ.get("AUTH_DEBUG_EXPOSE_TOKENS") == "true" else None
@@ -557,14 +558,14 @@ def confirm_email_verification(payload: schemas.EmailVerificationConfirm, db: DB
     if (
         not user
         or not user.email_verification_expires_at
-        or user.email_verification_expires_at < datetime.utcnow()
+        or user.email_verification_expires_at < utc_now()
     ):
         raise HTTPException(status_code=400, detail="Invalid or expired verification token")
 
     user.email_verified = True
     user.email_verification_token = None
     user.email_verification_expires_at = None
-    user.updated_at = datetime.utcnow()
+    user.updated_at = utc_now()
     db.commit()
     db.refresh(user)
 

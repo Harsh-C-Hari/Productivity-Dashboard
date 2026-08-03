@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..auth_dependencies import get_current_user
 from .assignments import serialize_assignment
@@ -33,7 +34,7 @@ def _compute_streaks(study_dates: set) -> tuple:
     if not study_dates:
         return 0, 0
 
-    today = datetime.utcnow().date()
+    today = utc_now().date()
     current = 0
     cursor = today if today in study_dates else today - timedelta(days=1)
     while cursor in study_dates:
@@ -52,7 +53,7 @@ def _compute_streaks(study_dates: set) -> tuple:
 
 
 def _build_analytics(db: Session, subjects: List[models.Subject], user_id: str) -> schemas.StudyAnalytics:
-    now = datetime.utcnow()
+    now = utc_now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=6)  # rolling 7-day window including today
     fortnight_start = today_start - timedelta(days=13)
@@ -110,7 +111,7 @@ def _build_analytics(db: Session, subjects: List[models.Subject], user_id: str) 
 def get_subjects_progress(db: Session, user_id: str) -> List[schemas.SubjectProgress]:
     """Per-subject completion/hours summary, shared by the Study Hub
     summary endpoint and the main dashboard's Subject Progress widget."""
-    now = datetime.utcnow()
+    now = utc_now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=6)
 
@@ -164,7 +165,7 @@ def get_subjects_progress(db: Session, user_id: str) -> List[schemas.SubjectProg
 def get_upcoming_overdue_assignments(db: Session, user_id: str):
     """Returns (upcoming, overdue) as serialized AssignmentOut lists,
     shared by the Study Hub summary and the main dashboard."""
-    now = datetime.utcnow()
+    now = utc_now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
     week_end = today_start + timedelta(days=7)
@@ -193,7 +194,7 @@ def get_upcoming_overdue_assignments(db: Session, user_id: str):
 
 
 def get_today_study_sessions(db: Session, user_id: str) -> List[schemas.StudySessionOut]:
-    now = datetime.utcnow()
+    now = utc_now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
 

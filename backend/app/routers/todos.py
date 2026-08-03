@@ -13,6 +13,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..urgency import compute_urgency
 from ..activity_log import log_activity
@@ -87,7 +88,7 @@ def list_todos(
         query = query.filter(
             models.ProjectTodo.status != models.TaskStatus.done,
             models.ProjectTodo.deadline.isnot(None),
-            models.ProjectTodo.deadline < datetime.utcnow(),
+            models.ProjectTodo.deadline < utc_now(),
         )
 
     if sort_by == "deadline":
@@ -172,15 +173,15 @@ def update_todo(todo_id: str, payload: schemas.ProjectTodoUpdate, current_user: 
     if todo.status == models.TaskStatus.done:
         todo.progress = 100
         if not was_done:
-            todo.completed_at = datetime.utcnow()
+            todo.completed_at = utc_now()
     elif was_done and todo.status != models.TaskStatus.done:
         todo.completed_at = None
 
     if todo.progress == 100 and todo.status != models.TaskStatus.done:
         todo.status = models.TaskStatus.done
-        todo.completed_at = datetime.utcnow()
+        todo.completed_at = utc_now()
 
-    todo.updated_at = datetime.utcnow()
+    todo.updated_at = utc_now()
     db.commit()
     db.refresh(todo)
 

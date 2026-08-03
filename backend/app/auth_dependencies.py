@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session as DBSession
 from . import models, project_helpers
 from .activity_log import log_activity_event
 from .database import get_db
+from .timeutils import utc_now
 from .security import TokenError, decode_access_token
 
 # A single, consistent 401 body for every "not authenticated" case, per
@@ -75,7 +76,7 @@ def _resolve_user_and_session(
     session = db.query(models.Session).filter(models.Session.id == session_id).first()
     if not session or session.revoked or session.user_id != user_id:
         raise _AUTH_ERROR
-    if session.expires_at and session.expires_at < datetime.utcnow():
+    if session.expires_at and session.expires_at < utc_now():
         raise _AUTH_ERROR
 
     user = db.query(models.User).filter(models.User.id == user_id).first()

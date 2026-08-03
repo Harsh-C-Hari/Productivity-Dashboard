@@ -11,6 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..project_helpers import log_timeline_event
@@ -129,11 +130,11 @@ def update_milestone(milestone_id: str, payload: schemas.MilestoneUpdate, curren
         milestone.completed = True
 
     if milestone.completed and not was_completed:
-        milestone.completed_at = datetime.utcnow()
+        milestone.completed_at = utc_now()
     elif not milestone.completed and was_completed:
         milestone.completed_at = None
 
-    milestone.updated_at = datetime.utcnow()
+    milestone.updated_at = utc_now()
     db.commit()
     db.refresh(milestone)
 

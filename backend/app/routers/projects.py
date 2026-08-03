@@ -19,6 +19,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..uploads import delete_upload
@@ -123,7 +124,7 @@ def get_projects_progress(
 def get_upcoming_milestones(db: Session, project_ids: List[str], limit: int = 8) -> List[schemas.MilestoneOut]:
     from datetime import datetime, timedelta
 
-    now = datetime.utcnow()
+    now = utc_now()
     week_end = now + timedelta(days=14)
     phase_map = {p.id: p for p in db.query(models.ProjectPhase).all()}
 
@@ -153,7 +154,7 @@ def get_upcoming_milestones(db: Session, project_ids: List[str], limit: int = 8)
 def get_overdue_project_todos(db: Session, project_ids: List[str], limit: int = 8) -> List[schemas.ProjectTodoOut]:
     from datetime import datetime
 
-    now = datetime.utcnow()
+    now = utc_now()
     feature_map = {f.id: f for f in db.query(models.Feature).all()}
     phase_map = {p.id: p for p in db.query(models.ProjectPhase).all()}
 
@@ -378,7 +379,7 @@ def update_project(project_id: str, payload: schemas.ProjectUpdate, current_user
     for field, value in data.items():
         setattr(project, field, value)
 
-    project.updated_at = __import__("datetime").datetime.utcnow()
+    project.updated_at = __import__("datetime").utc_now()
     db.commit()
     db.refresh(project)
 

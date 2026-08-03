@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..auth_dependencies import get_current_user
@@ -126,7 +127,7 @@ def update_note(
     if clear_topic:
         note.topic_id = None
 
-    note.updated_at = datetime.utcnow()
+    note.updated_at = utc_now()
     db.commit()
     db.refresh(note)
     subject = db.query(models.Subject).filter(models.Subject.id == note.subject_id).first()
@@ -163,7 +164,7 @@ async def upload_note_attachment(
     attachments = json.loads(note.attachments or "[]")
     attachments.append(meta)
     note.attachments = json.dumps(attachments)
-    note.updated_at = datetime.utcnow()
+    note.updated_at = utc_now()
     db.commit()
     db.refresh(note)
     subject = db.query(models.Subject).filter(models.Subject.id == note.subject_id).first()
@@ -186,7 +187,7 @@ def delete_note_attachment(
 
     delete_upload(filename)
     note.attachments = json.dumps(remaining)
-    note.updated_at = datetime.utcnow()
+    note.updated_at = utc_now()
     db.commit()
     db.refresh(note)
     subject = db.query(models.Subject).filter(models.Subject.id == note.subject_id).first()

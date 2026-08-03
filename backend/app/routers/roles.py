@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..timeutils import utc_now
 from .. import models, schemas
 from ..activity_log import log_activity
 from ..auth_dependencies import get_current_user
@@ -128,7 +129,7 @@ def update_role(
         setattr(role, field, value)
 
     import datetime as _dt
-    role.updated_at = _dt.datetime.utcnow()
+    role.updated_at = _dt.utc_now()
     db.commit()
     db.refresh(role)
     log_activity(db, f'Updated role "{role.name}"', icon="shield")
