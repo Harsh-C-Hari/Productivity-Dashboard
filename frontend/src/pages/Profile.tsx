@@ -225,8 +225,7 @@ function ProfileInfoCard() {
           <div className="flex flex-col gap-1.5">
             <Label>Theme</Label>
             <p className="text-sm text-muted-foreground">
-              This app ships with a single gaming-inspired dark theme -- light mode isn't implemented
-              yet (see Settings).
+              This app ships with a single theme (see Settings).
             </p>
           </div>
 

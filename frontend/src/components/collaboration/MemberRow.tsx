@@ -53,6 +53,7 @@ export function MemberRow({
   const statusMeta = MEMBER_STATUS_META[member.status];
   const name = member.user?.display_name || member.user?.username || "Unknown user";
   const hasActions = canManage || isSelf;
+  const changeableRoles = assignableRoles.filter((role) => role.id !== member.role_id);
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-base-900/30 p-3 hover:border-white/10 transition-colors">
@@ -74,6 +75,9 @@ export function MemberRow({
           )}
         </div>
         <p className="text-xs text-muted-foreground truncate">{member.user?.email ?? member.user_id}</p>
+        <div className="mt-1 flex md:hidden">
+          <RoleBadge role={member.role} />
+        </div>
       </button>
 
       <div className="hidden md:flex flex-col items-end gap-1 shrink-0 text-right">
@@ -106,11 +110,11 @@ export function MemberRow({
               <ShieldQuestion className="h-4 w-4" /> View profile
             </DropdownMenuItem>
 
-            {canManage && !isTargetOwner && assignableRoles.length > 0 && (
+            {canManage && !isTargetOwner && changeableRoles.length > 0 && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Change role</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  {assignableRoles.map((role) => (
+                  {changeableRoles.map((role) => (
                     <DropdownMenuItem key={role.id} onClick={() => onChangeRole(role.id)}>
                       <RoleBadge role={role} />
                     </DropdownMenuItem>
