@@ -6,6 +6,7 @@ import { useNotifications } from "@/context/NotificationContext";
 import { useAuth } from "@/context/AuthContext";
 import { useNotificationCounts } from "@/hooks/useNotificationCenter";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
+import { ConfirmDialog } from "@/components/collaboration/ConfirmDialog";
 
 const TITLES: Record<string, { title: string; subtitle: string }> = {
   "/": { title: "Dashboard", subtitle: "Your mission control for today" },
@@ -41,7 +42,19 @@ export function TopBar() {
   const { user, logout } = useAuth();
   const { data: counts } = useNotificationCounts();
   const [now, setNow] = useState(new Date());
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const meta = resolveTitleMeta(pathname);
+
+  async function handleConfirmLogout() {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      setLogoutConfirmOpen(false);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000 * 30);
@@ -116,7 +129,7 @@ export function TopBar() {
 
         {user && (
           <button
-            onClick={() => void logout()}
+            onClick={() => setLogoutConfirmOpen(true)}
             title="Sign out"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 text-muted-foreground transition-colors hover:bg-urgency-critical/10 hover:text-urgency-critical md:hidden"
           >
@@ -124,6 +137,16 @@ export function TopBar() {
           </button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={logoutConfirmOpen}
+        onOpenChange={setLogoutConfirmOpen}
+        title="Log out?"
+        description="You'll need to sign in again to access your dashboard."
+        confirmLabel="Log out"
+        loading={isLoggingOut}
+        onConfirm={handleConfirmLogout}
+      />
     </header>
   );
 }

@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { LayoutDashboard, ListChecks, CalendarClock, Settings, GraduationCap, FolderKanban, Bot, Zap, LogOut, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
 import { useNotificationCounts } from "@/hooks/useNotificationCenter";
+import { ConfirmDialog } from "@/components/collaboration/ConfirmDialog";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -18,6 +20,18 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const { user, logout } = useAuth();
   const { data: counts } = useNotificationCounts();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  async function handleConfirmLogout() {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      setLogoutConfirmOpen(false);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
 
   return (
     <aside className="hidden md:flex md:w-60 lg:w-64 shrink-0 flex-col border-r border-white/[0.06] bg-base-950/60 backdrop-blur-xl p-4">
@@ -86,7 +100,7 @@ export function Sidebar() {
               </div>
             </NavLink>
             <button
-              onClick={() => void logout()}
+              onClick={() => setLogoutConfirmOpen(true)}
               title="Sign out"
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-urgency-critical/10 hover:text-urgency-critical"
             >
@@ -95,6 +109,16 @@ export function Sidebar() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={logoutConfirmOpen}
+        onOpenChange={setLogoutConfirmOpen}
+        title="Log out?"
+        description="You'll need to sign in again to access your dashboard."
+        confirmLabel="Log out"
+        loading={isLoggingOut}
+        onConfirm={handleConfirmLogout}
+      />
     </aside>
   );
 }
