@@ -5,7 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/project-workspace/StatusBadge";
-import { getTokenRefreshReminder, setTokenRefreshReminder } from "@/lib/aiWorkspaceMeta";
+import {
+  getTokenRefreshReminder,
+  setTokenRefreshReminder,
+  getTokenLimitedFlag,
+  setTokenLimitedFlag,
+} from "@/lib/aiWorkspaceMeta";
 import {
   useAccountTokenTotal,
   useMarkAccountTokenLimited,
@@ -39,6 +44,7 @@ export function TokenRefreshCountdown({ accountId, accountName }: { accountId: s
   const [now, setNow] = useState(() => Date.now());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draftValue, setDraftValue] = useState("");
+  const [isLimited, setIsLimited] = useState<boolean>(() => getTokenLimitedFlag(accountId));
 
   const { data: total } = useAccountTokenTotal(accountId);
   const markLimited = useMarkAccountTokenLimited();
@@ -51,15 +57,22 @@ export function TokenRefreshCountdown({ accountId, accountName }: { accountId: s
     return () => window.clearInterval(id);
   }, []);
 
+  // Re-sync local state if this card gets reused for a different account.
+  useEffect(() => {
+    setReminder(getTokenRefreshReminder(accountId));
+    setIsLimited(getTokenLimitedFlag(accountId));
+  }, [accountId]);
+
   const remainingMs = reminder ? new Date(reminder).getTime() - now : null;
   const isOverdue = remainingMs !== null && remainingMs <= 0;
 
   const badge = useMemo(() => {
+    if (isLimited) return { label: "Limited", colorClass: "bg-urgency-critical/15 border-urgency-critical/40", textClass: "text-urgency-critical", dotClass: "bg-urgency-critical" };
     if (remainingMs === null) return { label: "No reminder set", colorClass: "bg-white/10 border-white/20", textClass: "text-muted-foreground", dotClass: "bg-muted-foreground" };
     if (isOverdue) return { label: "Refresh due", colorClass: "bg-urgency-critical/15 border-urgency-critical/40", textClass: "text-urgency-critical", dotClass: "bg-urgency-critical" };
     if (remainingMs <= 15 * 60_000) return { label: `Refreshes in ${formatDuration(remainingMs)}`, colorClass: "bg-urgency-medium/15 border-urgency-medium/40", textClass: "text-urgency-medium", dotClass: "bg-urgency-medium" };
     return { label: `Refreshes in ${formatDuration(remainingMs)}`, colorClass: "bg-urgency-low/15 border-urgency-low/40", textClass: "text-urgency-low", dotClass: "bg-urgency-low" };
-  }, [remainingMs, isOverdue]);
+  }, [remainingMs, isOverdue, isLimited]);
 
   function openDialog() {
     // Default the input to ~5 hours from now, a common chat-app reset window,
@@ -80,6 +93,19 @@ export function TokenRefreshCountdown({ accountId, accountName }: { accountId: s
   function handleClearReminder() {
     setTokenRefreshReminder(accountId, null);
     setReminder(null);
+  }
+
+  function handleMarkLimited() {
+    markLimited.mutate(accountId);
+    setTokenLimitedFlag(accountId, true);
+    setIsLimited(true);
+  }
+
+  function handleMarkRefreshed() {
+    markRefreshed.mutate(accountId);
+    setTokenLimitedFlag(accountId, false);
+    setIsLimited(false);
+    handleClearReminder();
   }
 
   return (
@@ -105,20 +131,18 @@ export function TokenRefreshCountdown({ accountId, accountName }: { accountId: s
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 px-1.5 text-[11px] gap-1 text-urgency-critical"
-          onClick={() => markLimited.mutate(accountId)}
-          disabled={markLimited.isPending}
+          className="h-6 px-1.5 text-[11px] gap-1 text-urgency-critical disabled:opacity-50 disabled:cursor-not-allowed"
+          onClick={handleMarkLimited}
+          disabled={markLimited.isPending || isLimited}
+          title={isLimited ? "Already marked as limited" : "Mark as limited"}
         >
-          <AlertTriangle className="h-3 w-3" /> Limited
+          <AlertTriangle className="h-3 w-3" /> {isLimited ? "Marked limited" : "Limited"}
         </Button>
         <Button
           variant="ghost"
           size="sm"
           className="h-6 px-1.5 text-[11px] gap-1 text-urgency-low"
-          onClick={() => {
-            markRefreshed.mutate(accountId);
-            handleClearReminder();
-          }}
+          onClick={handleMarkRefreshed}
           disabled={markRefreshed.isPending}
         >
           <RotateCcw className="h-3 w-3" /> Refreshed

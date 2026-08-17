@@ -118,3 +118,40 @@ export function setTokenRefreshReminder(accountId: string, isoTimestamp: string 
   else delete map[accountId];
   saveReminderMap(map);
 }
+
+// Client-side "marked as limited" flag per AI account. Mirrors the
+// reminder map above: `TokenTracker` has no persisted "is limited"
+// column to read back from the ActivityLog-backed mark-limited/mark-
+// refreshed endpoints, so the UI has no way to know the button was
+// already pressed. Tracking it locally lets the "Limited" button
+// disable itself once clicked, instead of staying clickable forever.
+const TOKEN_LIMITED_KEY = "ai-workspace:token-limited-accounts";
+
+type LimitedMap = Record<string, true>; // accountId -> marked-limited flag
+
+function loadLimitedMap(): LimitedMap {
+  try {
+    return JSON.parse(localStorage.getItem(TOKEN_LIMITED_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveLimitedMap(map: LimitedMap): void {
+  try {
+    localStorage.setItem(TOKEN_LIMITED_KEY, JSON.stringify(map));
+  } catch {
+    // Private browsing / storage disabled -- flag just won't persist.
+  }
+}
+
+export function getTokenLimitedFlag(accountId: string): boolean {
+  return !!loadLimitedMap()[accountId];
+}
+
+export function setTokenLimitedFlag(accountId: string, isLimited: boolean): void {
+  const map = loadLimitedMap();
+  if (isLimited) map[accountId] = true;
+  else delete map[accountId];
+  saveLimitedMap(map);
+}
