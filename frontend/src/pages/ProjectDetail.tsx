@@ -32,7 +32,7 @@ export default function ProjectDetail() {
   const { data: project, isLoading, isError } = useProject(projectId);
   const { data: summary } = useProjectSummary(projectId);
   const { data: collabSummary } = useProjectCollaborationSummary(projectId);
-  const { role: myRole, isOwner } = useCurrentMembership(projectId);
+  const { role: myRole, isOwner, hasPermission } = useCurrentMembership(projectId);
   const { data: owner } = useUser(project?.owner_id ?? undefined);
   const [quickInviteOpen, setQuickInviteOpen] = useState(false);
 
@@ -137,7 +137,7 @@ export default function ProjectDetail() {
               {collabSummary.pending_invitation_count === 1 ? "" : "s"}
             </Badge>
           )}
-          {collaborationAllowed(project) && (
+          {collaborationAllowed(project) && hasPermission("invite_members") && (
             <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setQuickInviteOpen(true)}>
               <UserPlus className="h-3.5 w-3.5" /> Quick invite
             </Button>
