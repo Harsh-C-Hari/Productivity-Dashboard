@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserPlus } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { PasswordStrengthMeter, passwordMeetsRequirements } from "@/components/auth/PasswordStrengthMeter";
 import { FormAlert } from "@/components/auth/FormAlert";
@@ -15,7 +16,7 @@ const USERNAME_MAX = 50;
 const DISPLAY_NAME_MAX = 150;
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState("");
@@ -51,6 +52,19 @@ export default function Register() {
       // already registered" (both 409s) -- surfaced verbatim so the
       // person knows exactly which field to change.
       setError(err instanceof Error ? err.message : "Couldn't create your account");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleGoogleCredential(idToken: string) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await loginWithGoogle(idToken);
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't sign up with Google");
     } finally {
       setSubmitting(false);
     }
@@ -145,6 +159,14 @@ export default function Register() {
           )}
           {submitting ? "Creating account…" : "Create account"}
         </Button>
+
+        <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
+          <div className="h-px flex-1 bg-white/10" />
+          or
+          <div className="h-px flex-1 bg-white/10" />
+        </div>
+
+        <GoogleSignInButton onCredential={handleGoogleCredential} disabled={submitting} />
       </form>
     </AuthShell>
   );

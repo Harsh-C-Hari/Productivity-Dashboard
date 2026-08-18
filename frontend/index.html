@@ -15,6 +15,11 @@
       rel="stylesheet"
     />
     <title>Productivity Dashboard</title>
+    <!-- Google Identity Services -- powers the "Continue with Google" button
+         on the Login/Register pages (src/components/auth/GoogleSignInButton.tsx).
+         Loaded globally (rather than dynamically injected) since it's tiny,
+         cacheable, and needed on more than one route. -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body class="bg-base-900 text-foreground antialiased font-body">
     <div id="root"></div>

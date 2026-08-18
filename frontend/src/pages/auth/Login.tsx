@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { LogIn } from "lucide-react";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { FormAlert } from "@/components/auth/FormAlert";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -32,6 +33,19 @@ export default function Login() {
       navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't sign in");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleGoogleCredential(idToken: string) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await loginWithGoogle(idToken, remember);
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't sign in with Google");
     } finally {
       setSubmitting(false);
     }
@@ -101,6 +115,14 @@ export default function Login() {
           )}
           {submitting ? "Signing in…" : "Sign in"}
         </Button>
+
+        <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
+          <div className="h-px flex-1 bg-white/10" />
+          or
+          <div className="h-px flex-1 bg-white/10" />
+        </div>
+
+        <GoogleSignInButton onCredential={handleGoogleCredential} disabled={submitting} />
       </form>
     </AuthShell>
   );

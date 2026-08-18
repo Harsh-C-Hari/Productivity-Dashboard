@@ -1,25 +1,30 @@
 """
-Authentication API: registration, login/logout, JWT access + refresh
-tokens, current-user profile management, password change/reset
-preparation, and email verification preparation.
+Authentication API: registration, login/logout (local password and
+Google Sign-In), JWT access + refresh tokens, current-user profile
+management, password reset, and email verification.
 
-Scope, per the task brief: backend Identity & Security only. No
-frontend, no OAuth/SSO/MFA, no email sending (password reset / email
-verification issue and validate tokens but never dispatch mail -- see
-each endpoint's docstring). Session listing/revocation lives in the
-sibling `routers/sessions.py` (one router, one responsibility, per
+Password reset and email verification issue/validate tokens and send
+real mail via `email_utils` whenever SMTP is configured (see
+backend/.env.example); with no SMTP configured they fall back to
+returning the raw token in the response, gated behind
+`AUTH_DEBUG_EXPOSE_TOKENS`, so local/dev usage never requires a mail
+server. Google Sign-In (`POST /google`) verifies a Google Identity
+Services ID token server-side against `GOOGLE_CLIENT_ID` -- see that
+endpoint's docstring. Session listing/revocation lives in the sibling
+`routers/sessions.py` (one router, one responsibility, per
 ENGINEERING_GUIDELINES.md "Router Rules").
 
 Every write here that changes account/security state calls
 `log_activity_event` (see AI_HANDOFF.md "Activity Logging"), mirroring
 every other collaboration router's convention.
 """
+import re
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session as DBSession
 
-from .. import models, schemas
+from .. import models, schemas, email_utils
 from ..activity_log import log_activity_event
 from ..auth_dependencies import get_current_user, get_current_user_and_session, get_current_user_optional
 from ..database import get_db
@@ -85,6 +90,35 @@ def _get_user_by_login_identifier(db: DBSession, identifier: str) -> "models.Use
     return db.query(models.User).filter(models.User.username == identifier).first()
 
 
+def _unique_username_from_email(db: DBSession, email: str) -> str:
+    """Derives a username candidate from the local part of an email
+    (e.g. "jane.doe@x.com" -> "janedoe"), then appends a numeric suffix
+    until it's free. Only used for accounts created via Google sign-in,
+    which never collects a username up front."""
+    base = re.sub(r"[^a-zA-Z0-9_]", "", email.split("@")[0]).lower() or "user"
+    base = base[:40]
+    candidate = base
+    suffix = 1
+    while db.query(models.User).filter(models.User.username == candidate).first():
+        suffix += 1
+        candidate = f"{base}{suffix}"
+    return candidate
+
+
+def _issue_and_send_verification_token(db: DBSession, user: models.User) -> bool:
+    """Generates a fresh email-verification token, persists it, and emails
+    it via `email_utils`. Shared by `register` (best-effort, fire-and-forget
+    right after account creation) and `request_email_verification` (the
+    explicit resend flow) so token-issuance + delivery lives in one place.
+    Returns whether an email was actually sent (False if SMTP isn't
+    configured or the send failed)."""
+    token = generate_opaque_token(32)
+    user.email_verification_token = token
+    user.email_verification_expires_at = utc_now() + timedelta(hours=EMAIL_VERIFICATION_EXPIRE_HOURS)
+    db.commit()
+    return email_utils.send_verification_email(user.email, user.display_name or user.username, token)
+
+
 # ======================================================================
 # Registration / Login / Logout
 # ======================================================================
@@ -122,6 +156,14 @@ def register(payload: schemas.RegisterRequest, db: DBSession = Depends(get_db)):
         entity_type="user",
         entity_id=user.id,
     )
+
+    # Best-effort: fire off a verification email right away when SMTP is
+    # configured, so the person doesn't have to separately open
+    # /verify-email and click "send". Never blocks registration --
+    # if SMTP isn't set up (or a send fails), the user can still trigger
+    # it later from /verify-email, same as before this existed.
+    if email_utils.smtp_configured():
+        _issue_and_send_verification_token(db, user)
 
     # Registration logs the user in immediately (issues a real session),
     # rather than requiring a separate follow-up login call.
@@ -355,9 +397,9 @@ def update_email(
     """Changing your email requires your current password (a
     security-sensitive change, same reasoning as `change_password`
     below) and always resets `email_verified` to False -- the new
-    address hasn't been proven deliverable yet. Actually sending a
-    verification email is out of scope; see `request_email_verification`
-    for the token-issuance half of that flow."""
+    address hasn't been proven deliverable yet. Call
+    `request_email_verification` afterwards to send a verification
+    email to the new address."""
     if not verify_password(payload.current_password, current_user.password_hash or ""):
         raise HTTPException(status_code=401, detail="Incorrect password")
     if payload.email != current_user.email and db.query(models.User).filter(models.User.email == payload.email).first():
@@ -457,7 +499,7 @@ def change_password(
 
 
 # ======================================================================
-# Password reset (preparation only -- no email is sent)
+# Password reset
 # ======================================================================
 
 @router.post("/password-reset/request", response_model=schemas.PasswordResetRequestOut)
@@ -468,11 +510,10 @@ def request_password_reset(payload: schemas.PasswordResetRequest, db: DBSession 
     a refresh token which is long-lived -- see model column comment).
     Always returns the same generic message whether or not the email
     matched a User, so this endpoint can't be used to enumerate
-    registered accounts. No email is actually sent (task brief: "Password
-    Reset Preparation") -- the token is only ever returned in the
-    response when no user matched *or* matched, controlled entirely by
-    whether `AUTH_DEBUG_EXPOSE_TOKENS` is set, so local/dev testing isn't
-    blocked on a mail server that doesn't exist yet."""
+    registered accounts. Sends the actual reset email via `email_utils`
+    when SMTP is configured; otherwise falls back to returning the raw
+    token in the response, gated behind `AUTH_DEBUG_EXPOSE_TOKENS`, so
+    local/dev testing isn't blocked on a mail server that doesn't exist."""
     import os
 
     user = db.query(models.User).filter(models.User.email == payload.email).first()
@@ -491,7 +532,8 @@ def request_password_reset(payload: schemas.PasswordResetRequest, db: DBSession 
             entity_type="user",
             entity_id=user.id,
         )
-        if os.environ.get("AUTH_DEBUG_EXPOSE_TOKENS") == "true":
+        sent = email_utils.send_password_reset_email(user.email, user.display_name or user.username, token)
+        if not sent and os.environ.get("AUTH_DEBUG_EXPOSE_TOKENS") == "true":
             debug_token = token
 
     return schemas.PasswordResetRequestOut(debug_reset_token=debug_token)
@@ -530,7 +572,7 @@ def confirm_password_reset(payload: schemas.PasswordResetConfirm, db: DBSession 
 
 
 # ======================================================================
-# Email verification (preparation only -- no email is sent)
+# Email verification
 # ======================================================================
 
 @router.post("/email-verification/request", response_model=schemas.EmailVerificationRequestOut)
@@ -538,17 +580,24 @@ def request_email_verification(
     current_user: models.User = Depends(get_current_user),
     db: DBSession = Depends(get_db),
 ):
+    """Sends a real verification email via `email_utils` when SMTP is
+    configured. Otherwise falls back to returning the raw token in the
+    response, gated behind `AUTH_DEBUG_EXPOSE_TOKENS`, so local/dev
+    testing isn't blocked on a mail server that doesn't exist."""
     import os
 
     if current_user.email_verified:
         return schemas.EmailVerificationRequestOut(message="Your email is already verified.")
 
-    token = generate_opaque_token(32)
-    current_user.email_verification_token = token
-    current_user.email_verification_expires_at = utc_now() + timedelta(hours=EMAIL_VERIFICATION_EXPIRE_HOURS)
-    db.commit()
+    sent = _issue_and_send_verification_token(db, current_user)
+    if sent:
+        return schemas.EmailVerificationRequestOut(message="Check your email for a verification link.")
 
-    debug_token = token if os.environ.get("AUTH_DEBUG_EXPOSE_TOKENS") == "true" else None
+    debug_token = (
+        current_user.email_verification_token
+        if os.environ.get("AUTH_DEBUG_EXPOSE_TOKENS") == "true"
+        else None
+    )
     return schemas.EmailVerificationRequestOut(debug_verification_token=debug_token)
 
 
@@ -579,3 +628,102 @@ def confirm_email_verification(payload: schemas.EmailVerificationConfirm, db: DB
         entity_id=user.id,
     )
     return schemas.UserOut.model_validate(user)
+
+
+# ======================================================================
+# Google Sign-In
+# ======================================================================
+
+@router.post("/google", response_model=schemas.TokenResponse)
+def google_login(payload: schemas.GoogleAuthRequest, db: DBSession = Depends(get_db)):
+    """Verifies a Google Identity Services ID token (the `credential` the
+    frontend's Google button hands back) against Google's public keys,
+    then finds-or-creates a User keyed on the token's `sub` claim and
+    issues the same access/refresh token pair as a normal login/register.
+
+    Requires `GOOGLE_CLIENT_ID` to be set (the OAuth 2.0 Web Client ID
+    from Google Cloud Console) -- the token's `aud` claim must match it,
+    which is what stops a token minted for a *different* app from being
+    replayed here. No password is ever set for accounts created this
+    way (`password_hash` stays null, same as any other non-local
+    `auth_provider`)."""
+    import os
+
+    from google.auth.transport import requests as google_requests
+    from google.oauth2 import id_token as google_id_token
+
+    client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    if not client_id:
+        raise HTTPException(status_code=500, detail="Google sign-in is not configured on this server")
+
+    try:
+        idinfo = google_id_token.verify_oauth2_token(payload.id_token, google_requests.Request(), client_id)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google credential")
+
+    if idinfo.get("iss") not in ("accounts.google.com", "https://accounts.google.com"):
+        raise HTTPException(status_code=401, detail="Invalid Google credential issuer")
+    if not idinfo.get("email_verified", False):
+        raise HTTPException(status_code=401, detail="Your Google account's email isn't verified")
+
+    google_sub = idinfo["sub"]
+    email = idinfo["email"]
+    name = idinfo.get("name") or email.split("@")[0]
+    is_new_user = False
+
+    user = (
+        db.query(models.User)
+        .filter(models.User.auth_provider == models.AuthProvider.google, models.User.external_auth_id == google_sub)
+        .first()
+    )
+
+    if not user:
+        # Someone may have registered locally with this email already --
+        # link the Google identity to that existing account instead of
+        # erroring or creating a duplicate. Same "email is the anchor"
+        # reasoning project_helpers.get_or_create_user_by_email already
+        # uses for invitation-created users.
+        user = db.query(models.User).filter(models.User.email == email).first()
+        if user:
+            user.auth_provider = models.AuthProvider.google
+            user.external_auth_id = google_sub
+            user.email_verified = True
+            user.updated_at = utc_now()
+        else:
+            is_new_user = True
+            user = models.User(
+                username=_unique_username_from_email(db, email),
+                email=email,
+                display_name=name,
+                auth_provider=models.AuthProvider.google,
+                external_auth_id=google_sub,
+                email_verified=True,
+                status=models.UserStatus.active,
+            )
+            db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    if user.status == models.UserStatus.suspended:
+        raise HTTPException(status_code=403, detail="This account has been suspended")
+    if user.status == models.UserStatus.deactivated:
+        raise HTTPException(status_code=403, detail="This account has been deactivated")
+
+    user.last_seen_at = utc_now()
+    if user.status == models.UserStatus.invited:
+        user.status = models.UserStatus.active
+    db.commit()
+    db.refresh(user)
+
+    tokens = _issue_tokens(db, user, device=payload.device, platform=payload.platform, browser=payload.browser)
+
+    log_activity_event(
+        db,
+        f"{user.display_name or user.username} {'signed up' if is_new_user else 'logged in'} with Google",
+        icon="user-plus" if is_new_user else "log-in",
+        user_id=user.id,
+        action="registered" if is_new_user else "login",
+        entity_type="user",
+        entity_id=user.id,
+    )
+    return tokens

@@ -1749,6 +1749,19 @@ class LoginRequest(BaseModel):
     browser: str = Field(default="", max_length=60)
 
 
+class GoogleAuthRequest(BaseModel):
+    """Sent by the frontend's Google Identity Services button.
+    `id_token` is the raw JWT credential Google issues to the browser --
+    it is verified server-side (signature, audience, issuer, expiry)
+    in routers/auth.py before any User row is trusted or created. Same
+    device/platform/browser fields as LoginRequest, for the same
+    multi-device Session bookkeeping."""
+    id_token: str = Field(..., min_length=1)
+    device: str = Field(default="", max_length=150)
+    platform: str = Field(default="", max_length=60)
+    browser: str = Field(default="", max_length=60)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str

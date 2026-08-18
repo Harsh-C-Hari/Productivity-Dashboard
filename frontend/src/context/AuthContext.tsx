@@ -35,6 +35,7 @@ interface AuthContextValue {
   status: AuthStatus;
   user: User | null;
   login: (identifier: string, password: string, remember: boolean) => Promise<User>;
+  loginWithGoogle: (idToken: string, remember?: boolean) => Promise<User>;
   register: (payload: Omit<RegisterRequest, "display_name"> & { display_name?: string }) => Promise<User>;
   logout: () => Promise<void>;
   updateUser: (patch: Partial<User>) => void;
@@ -167,6 +168,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyTokens]
   );
 
+  const loginWithGoogle = useCallback(
+    async (idToken: string, remember = true) => {
+      // Defaults to "remembered", same reasoning as `register` below --
+      // someone using Google sign-in on their own device expects to
+      // stay signed in.
+      const tokens = await api.googleLogin({ id_token: idToken, ...deviceContext() });
+      applyTokens(tokens, remember);
+      return tokens.user;
+    },
+    [applyTokens]
+  );
+
   const logout = useCallback(async () => {
     try {
       if (getAccessToken()) await api.logout();
@@ -215,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => clearRefreshTimer, [clearRefreshTimer]);
 
   return (
-    <AuthContext.Provider value={{ status, user, login, register, logout, updateUser, refresh }}>
+    <AuthContext.Provider value={{ status, user, login, loginWithGoogle, register, logout, updateUser, refresh }}>
       {children}
     </AuthContext.Provider>
   );

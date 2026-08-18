@@ -3,7 +3,23 @@ FastAPI application entrypoint.
 
 Run with:  uvicorn app.main:app --reload --port 8000
 """
+import os
+from pathlib import Path
 from datetime import datetime, timedelta
+
+from dotenv import load_dotenv
+
+# Load backend/.env explicitly, by path relative to this file, *before*
+# importing any local module below -- several of them (database.py,
+# security.py, uploads.py, email_utils.py) read os.environ at import
+# time, so .env has to be in os.environ before those imports run.
+#
+# We resolve the path from this file's own location (not relying on
+# python-dotenv's cwd-based auto-discovery) so `uvicorn app.main:app`
+# picks up backend/.env no matter which directory you launch it from.
+# On Vercel there's no .env file at all -- load_dotenv() just no-ops
+# and the real env vars set in Project Settings are used as-is.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from . import models
 from .database import engine, SessionLocal, run_startup_migrations
 from .timeutils import utc_now
-from .uploads import UPLOAD_DIR, ensure_upload_dir
+from .uploads import UPLOAD_DIR, ensure_upload_dir, supabase_storage_configured
 from .routers import (
     tasks,
     timetable,
@@ -55,30 +71,57 @@ from .routers import (
     sessions,
 )
 
-models.Base.metadata.create_all(bind=engine)
-run_startup_migrations()  # adds the data-isolation fix's user_id columns to pre-existing databases
-ensure_upload_dir()
+# `RUN_STARTUP_TASKS` (default "true") gates `create_all` + the
+# ownership-column migration + the three `_seed_if_empty` sample-data
+# seeders below. Each is idempotent/safe to re-run, but on serverless
+# every cold start pays for the extra round-trips to the database (see
+# database.py's `run_startup_migrations` docstring) -- once a
+# deployment's schema is known current, set this to "false" so cold
+# starts don't do that work (and don't open a connection just to run a
+# handful of `SELECT count(*)` checks) on every invocation.
+_RUN_STARTUP_TASKS = os.environ.get("RUN_STARTUP_TASKS", "true").lower() != "false"
+
+if _RUN_STARTUP_TASKS:
+    models.Base.metadata.create_all(bind=engine)
+    run_startup_migrations()  # adds the data-isolation fix's user_id columns to pre-existing databases
+
+# Local-disk mode only: Vercel's filesystem is read-only outside /tmp,
+# so this must never run when Supabase Storage is configured (see
+# uploads.py) -- `ensure_upload_dir` already no-ops in that case, but
+# skip it here too rather than relying on that alone.
+if not supabase_storage_configured():
+    ensure_upload_dir()
 
 app = FastAPI(title="Productivity Dashboard API", version="1.0.0")
 
-# Wide-open CORS is fine here: this is a local personal-use app, not a
-# multi-tenant public service. Tighten allow_origins if you ever deploy
-# it publicly. allow_credentials is intentionally False: auth tokens are
+# `ALLOWED_ORIGINS` -- comma-separated list of allowed frontend origins,
+# e.g. "https://your-app.vercel.app,https://your-app-git-preview.vercel.app".
+# Defaults to "*" (wide open) so the app still works out of the box for
+# local/personal use; set this explicitly once real users are on it.
+# allow_credentials is intentionally False either way: auth tokens are
 # sent via the `Authorization` header (see frontend/src/lib/api.ts), not
 # cookies, so no cross-site credentialed requests are ever made -- and
 # allow_credentials=True combined with a wildcard origin is a real CORS
 # misconfiguration (browsers reject it; some servers silently reflect
 # the request origin instead, which is worse than either setting alone).
+_allowed_origins_env = os.environ.get("ALLOWED_ORIGINS", "").strip()
+_allowed_origins = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Serves uploaded assignment/note attachments and resource-library files.
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+# Serves uploaded assignment/note attachments and resource-library files
+# in local-disk mode only -- in Supabase Storage mode, `save_upload`
+# already returns a direct Supabase public URL, so there's nothing for
+# this app to serve itself (and UPLOAD_DIR may not even exist on
+# Vercel's read-only filesystem).
+if not supabase_storage_configured():
+    app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 app.include_router(tasks.router)
 app.include_router(timetable.router)
@@ -502,6 +545,13 @@ def _seed_collaboration_if_empty():
         db.close()
 
 
-_seed_if_empty()
-_seed_study_hub_if_empty()
-_seed_collaboration_if_empty()
+# Sample-data seeders -- each already checks "is this table empty?"
+# before writing anything, so these are no-ops against a real,
+# populated (e.g. migrated-to-Supabase) database. Still gated behind
+# `_RUN_STARTUP_TASKS` (see above) purely to skip the extra
+# count-query round-trips on every serverless cold start once a
+# deployment is known to be past the "needs seeding" stage.
+if _RUN_STARTUP_TASKS:
+    _seed_if_empty()
+    _seed_study_hub_if_empty()
+    _seed_collaboration_if_empty()

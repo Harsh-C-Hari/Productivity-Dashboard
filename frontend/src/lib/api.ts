@@ -84,6 +84,7 @@ import type {
   User,
   RegisterRequest,
   LoginRequest,
+  GoogleAuthRequest,
   TokenResponse,
   ChangePasswordRequest,
   PasswordResetRequestOut,
@@ -128,7 +129,12 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 // Endpoints that either don't take an access token or ARE the token
 // refresh call itself -- attempting a refresh-and-retry on a 401 from
 // any of these would either be pointless or recurse into itself.
-const AUTH_EXEMPT_PATHS = new Set(["/api/auth/login", "/api/auth/register", "/api/auth/refresh"]);
+const AUTH_EXEMPT_PATHS = new Set([
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/refresh",
+  "/api/auth/google",
+]);
 
 // Single-flight refresh: if five queries all 401 at once (e.g. right
 // after the access token expires), they should share one /refresh call
@@ -958,6 +964,8 @@ export const api = {
     request<TokenResponse>("/api/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   login: (payload: LoginRequest) =>
     request<TokenResponse>("/api/auth/login", { method: "POST", body: JSON.stringify(payload) }),
+  googleLogin: (payload: GoogleAuthRequest) =>
+    request<TokenResponse>("/api/auth/google", { method: "POST", body: JSON.stringify(payload) }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   revokeToken: (refresh_token: string) =>
     request<void>("/api/auth/revoke", { method: "POST", body: JSON.stringify({ refresh_token }) }),

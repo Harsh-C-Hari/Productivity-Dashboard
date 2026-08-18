@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from .. import models, schemas
 from ..activity_log import log_activity
-from ..uploads import save_upload, delete_upload
+from ..uploads import save_upload, delete_upload, SUPABASE_ZIPS_BUCKET
 from ..project_helpers import log_timeline_event, get_accessible_project_ids
 from ..auth_dependencies import get_current_user, require_project_access
 
@@ -107,7 +107,7 @@ async def upload_project_zip(
     require_project_access(db, current_user, project_id, "manage_ai_workspace")
 
     try:
-        meta = await save_upload(file)
+        meta = await save_upload(file, bucket=SUPABASE_ZIPS_BUCKET)
     except ValueError as exc:
         raise HTTPException(status_code=413, detail=str(exc))
 
@@ -151,7 +151,7 @@ async def replace_project_zip(
     old_file_name = zip_row.file_name
 
     try:
-        meta = await save_upload(file)
+        meta = await save_upload(file, bucket=SUPABASE_ZIPS_BUCKET)
     except ValueError as exc:
         raise HTTPException(status_code=413, detail=str(exc))
 
@@ -167,7 +167,7 @@ async def replace_project_zip(
     db.refresh(zip_row)
 
     if old_file_name:
-        delete_upload(old_file_name)
+        delete_upload(old_file_name, bucket=SUPABASE_ZIPS_BUCKET)
 
     log_activity(db, f'Replaced project zip "{zip_row.original_name}"', icon="refresh-cw")
     if zip_row.project_id:
@@ -202,7 +202,7 @@ def delete_project_zip(zip_id: str, current_user: models.User = Depends(get_curr
     zip_row = get_zip_or_404(db, zip_id)
     require_project_access(db, current_user, zip_row.project_id, "manage_ai_workspace")
     if zip_row.file_name:
-        delete_upload(zip_row.file_name)
+        delete_upload(zip_row.file_name, bucket=SUPABASE_ZIPS_BUCKET)
     label = zip_row.version_label or zip_row.original_name or zip_row.id
     db.delete(zip_row)
     db.commit()

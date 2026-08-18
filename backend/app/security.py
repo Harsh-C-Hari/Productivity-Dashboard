@@ -37,9 +37,25 @@ from .timeutils import utc_now
 # below only exists so this single-user local app boots out of the box;
 # it is intentionally obvious/greppable so nobody mistakes it for a real
 # secret.
+#
+# Vercel sets `VERCEL_ENV=production` on its production deployments
+# (and `preview`/`development` on the others) -- if that's set and
+# nobody configured a real AUTH_SECRET_KEY, fail loudly at import time
+# instead of quietly signing every JWT with a string that's sitting in
+# this file's git history. Better a 500-everywhere deploy you notice
+# immediately than a live app where every access/refresh token can be
+# forged by anyone who's read this repo.
 # ======================================================================
-SECRET_KEY = os.environ.get("AUTH_SECRET_KEY", "dev-insecure-secret-key-change-in-production")
+_INSECURE_DEFAULT_SECRET = "dev-insecure-secret-key-change-in-production"
+SECRET_KEY = os.environ.get("AUTH_SECRET_KEY", _INSECURE_DEFAULT_SECRET)
 JWT_ALGORITHM = "HS256"
+
+if os.environ.get("VERCEL_ENV") == "production" and SECRET_KEY == _INSECURE_DEFAULT_SECRET:
+    raise RuntimeError(
+        "AUTH_SECRET_KEY is not set. Set it in the Vercel project's "
+        "environment variables before deploying to production -- see "
+        "backend/.env.example."
+    )
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.environ.get("REFRESH_TOKEN_EXPIRE_DAYS", "30"))

@@ -42,6 +42,13 @@ export interface LoginRequest {
   browser?: string;
 }
 
+export interface GoogleAuthRequest {
+  id_token: string;
+  device?: string;
+  platform?: string;
+  browser?: string;
+}
+
 export interface TokenResponse {
   access_token: string;
   refresh_token: string;
