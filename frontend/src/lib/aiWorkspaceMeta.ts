@@ -112,11 +112,26 @@ export function getAllTokenRefreshReminders(): ReminderMap {
   return loadReminderMap();
 }
 
+// Fired whenever a reminder is set/cleared, so any open list (e.g.
+// AIAccountsView, which sorts cards by soonest reminder) can react
+// immediately in the same tab -- the browser's built-in "storage"
+// event only fires in *other* tabs, never the one that made the change.
+export const REMINDERS_CHANGED_EVENT = "ai-workspace:reminders-changed";
+
+function notifyRemindersChanged(): void {
+  try {
+    window.dispatchEvent(new Event(REMINDERS_CHANGED_EVENT));
+  } catch {
+    // no-op outside a browser environment
+  }
+}
+
 export function setTokenRefreshReminder(accountId: string, isoTimestamp: string | null): void {
   const map = loadReminderMap();
   if (isoTimestamp) map[accountId] = isoTimestamp;
   else delete map[accountId];
   saveReminderMap(map);
+  notifyRemindersChanged();
 }
 
 // Client-side "marked as limited" flag per AI account. Mirrors the
