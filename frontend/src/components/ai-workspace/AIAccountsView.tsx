@@ -17,7 +17,7 @@ import {
   useDeleteAIAccount,
   useTouchAIAccount,
 } from "@/hooks/useAIAccounts";
-import { AI_PROVIDER_META, AI_ACCOUNT_STATUS_META, AI_PROVIDER_OPTIONS, AI_ACCOUNT_STATUS_OPTIONS, getDefaultAccountId, setDefaultAccountId } from "@/lib/aiWorkspaceMeta";
+import { AI_PROVIDER_META, AI_ACCOUNT_STATUS_META, AI_PROVIDER_OPTIONS, AI_ACCOUNT_STATUS_OPTIONS, getDefaultAccountId, setDefaultAccountId, getAllTokenRefreshReminders, REMINDERS_CHANGED_EVENT } from "@/lib/aiWorkspaceMeta";
 import type { AIAccount, AIAccountInput, AIAccountSummary } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 
@@ -32,6 +32,16 @@ export function AIAccountsView() {
     setDefaultIdState(getDefaultAccountId());
   }, []);
 
+  // Bumped whenever a token-refresh reminder is set/cleared (see
+  // TokenRefreshCountdown), so the card order below re-sorts right
+  // away instead of waiting for some unrelated re-render.
+  const [remindersTick, setRemindersTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setRemindersTick((t) => t + 1);
+    window.addEventListener(REMINDERS_CHANGED_EVENT, bump);
+    return () => window.removeEventListener(REMINDERS_CHANGED_EVENT, bump);
+  }, []);
+
   const filtered = useMemo(() => {
     let list = summaries ?? [];
     if (statusFilter !== "all") list = list.filter((s) => s.account.status === statusFilter);
@@ -41,13 +51,22 @@ export function AIAccountsView() {
         (s) => s.account.name.toLowerCase().includes(q) || s.account.description.toLowerCase().includes(q)
       );
     }
+    // Soonest-refreshing account first (accounts with no reminder set
+    // fall back to the old "most recently updated" order, after every
+    // account that does have one) -- the default-starred account, if
+    // any, still always stays pinned at the very top regardless.
+    const reminders = getAllTokenRefreshReminders();
     return [...list].sort((a, b) => {
       if (a.account.id === defaultId) return -1;
       if (b.account.id === defaultId) return 1;
+      const aReminder = reminders[a.account.id];
+      const bReminder = reminders[b.account.id];
+      if (aReminder && bReminder) return new Date(aReminder).getTime() - new Date(bReminder).getTime();
+      if (aReminder) return -1;
+      if (bReminder) return 1;
       return new Date(b.account.updated_at).getTime() - new Date(a.account.updated_at).getTime();
     });
-  }, [summaries, search, statusFilter, defaultId]);
-
+  }, [summaries, search, statusFilter, defaultId, remindersTick]);
   function handleSetDefault(id: string) {
     const next = defaultId === id ? null : id;
     setDefaultAccountId(next);
