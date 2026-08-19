@@ -33,7 +33,12 @@ built to be installed on your phone or desktop and used every day.
 - **Authentication** — email/password accounts with bcrypt-hashed passwords, short-lived
   JWT access tokens paired with rotating opaque refresh tokens, per-device session
   management (view/revoke active sessions, "log out everywhere"), and password-strength
-  validation. See [`backend/app/security.py`](backend/app/security.py).
+  validation, plus optional Google Sign-In. See
+  [`backend/app/security.py`](backend/app/security.py). Email verification and
+  password-reset flows are built in and send real mail via SMTP when
+  `SMTP_HOST`/`SMTP_FROM_EMAIL` are configured (see `backend/.env.example`); with no
+  SMTP configured, the raw token can be exposed directly in the API response instead
+  (`AUTH_DEBUG_EXPOSE_TOKENS=true`), for local testing without a mail server.
 - **Project Collaboration** — invite teammates onto a project by email, assign them a
   role (Owner / Admin / Member / Viewer, or a custom role built from granular
   permissions), manage pending invitations, and transfer project ownership — all from
@@ -57,7 +62,7 @@ built to be installed on your phone or desktop and used every day.
 |------------|------|
 | Frontend   | React, Vite, TypeScript, Tailwind CSS, shadcn/ui-style components, Framer Motion, React Router |
 | Backend    | FastAPI (Python) |
-| Database   | SQLite (via SQLAlchemy) |
+| Database   | SQLite by default (via SQLAlchemy); Postgres (e.g. Supabase) if `DATABASE_URL` is set |
 | State      | React Query (server state) + Context API (notifications) |
 | Icons      | Lucide React |
 | Charts     | Recharts |
@@ -93,6 +98,142 @@ productivity-dashboard/
     │   │   ├── layout/            # Sidebar, MobileNav, TopBar, AppLayout, GlobalSearch
     │   │   ├── auth/               # Login/Register forms, protected-route guard
     │   │   ├── dashboard/          # QuickStats, TodayTasks, OverdueTasks, ...
+    │   │   ├── tasks/               # TaskCard, TaskForm, TaskList, QuickCapture, UrgencyRing
+    │   │   ├── timetable/            # WeeklyTimetable, TimetableCard, TimetableSlotForm
+    │   │   ├── study-hub/             # Subjects, Assignments, Notes, Resources, Sessions
+    │   │   ├── project-workspace/      # Phases, Features, Todos, Bugs, Milestones, Roadmap
+    │   │   ├── ai-workspace/            # AI Accounts, Conversations, Prompts, Handoffs
+    │   │   └── collaboration/            # Members, Invitations, Roles, Permissions, Settings
+    │   ├── pages/                          # Dashboard, Tasks, Timetable, StudyHub,
+    │   │                                   # ProjectDetail, AIWorkspace, Profile, auth/
+    │   ├── hooks/                           # React Query hooks (one per resource)
+    │   ├── context/                          # NotificationContext (permissions + in-app toasts)
+    │   ├── lib/                                # api client, auth client, date/urgency helpers
+    │   └── types/                                # shared TypeScript types
+    └── public/                                    # PWA icons
+```
+
+---
+
+## Running it locally
+
+You need **Python 3.10+** and **Node 18+** installed. Two terminals, one for each service.
+
+### 1. Backend (FastAPI)
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+
+The API is now live at `http://127.0.0.1:8000` (interactive docs at `/docs`). On first
+run it automatically creates `backend/dashboard.db` (SQLite) and seeds it with a handful
+of realistic sample tasks and a sample timetable, so the app isn't empty on first load.
+
+Optional environment variables (all have safe local-dev defaults — see
+`backend/.env.example` for the full annotated list):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `AUTH_SECRET_KEY` | a fixed, obviously-fake dev string | JWT signing key. **Must** be set to a long random value in any real deployment. |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Access token lifetime. |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | `30` | Refresh token / session lifetime. |
+| `AUTH_DEBUG_EXPOSE_TOKENS` | `false` | If `true`, password-reset/email-verification endpoints return the raw token in the JSON response instead of only emailing it. Dev/testing only. |
+| `DATABASE_URL` | blank (SQLite) | Set to a Postgres connection string (e.g. Supabase, pooled/port 6543) to use Postgres instead. |
+| `SMTP_HOST` / `SMTP_FROM_EMAIL` | blank | Leave both blank to disable outgoing mail. Set to send real verification/password-reset emails — see `backend/.env.example` for the full SMTP variable list and a Gmail app-password walkthrough. |
+| `GOOGLE_CLIENT_ID` | blank | Enables the Google Sign-In button; must match the frontend's `VITE_GOOGLE_CLIENT_ID`. |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | blank | Leave blank to store uploads on local disk. Set both to route uploads through Supabase Storage instead (required if deploying to Vercel). |
+
+### 2. Frontend (Vite + React)
+
+In a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`. In dev mode, Vite proxies any `/api/*` request to
+`http://127.0.0.1:8000` (see `vite.config.ts`), so no extra configuration is needed.
+
+You'll land on the **Register** screen first — create an account (email + password, 8+
+characters with at least one letter and one number). Sample tasks, timetable entries,
+and study-hub data are seeded into the database on first boot so the app isn't empty
+once you're signed in.
+
+---
+
+## Building for production
+
+```bash
+cd frontend
+npm run build      # outputs to frontend/dist
+npm run preview    # optional: serve the production build locally
+```
+
+Serve `frontend/dist` with any static file host (or behind the same reverse proxy as the
+FastAPI app). If the frontend and backend are on different origins in production, set
+`VITE_API_BASE_URL` in `frontend/.env` (see `.env.example`) to the backend's full URL
+before building.
+
+For the backend in production, run behind a process manager, e.g.:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+---
+
+## Installing as a PWA
+
+Once the frontend is running (dev or a served production build):
+
+- **Desktop Chrome/Edge**: click the install icon in the address bar, or the menu →
+  "Install Productivity Dashboard".
+- **Android Chrome**: menu → "Add to Home screen".
+- **iOS Safari**: Share button → "Add to Home Screen".
+
+Push-style notifications require you to click **Enable alerts** (top bar) or the
+**Notifications** card in Settings, and to grant the browser permission prompt.
+
+---
+
+## How Smart Urgency works
+
+Each task's urgency tier is computed fresh on every read (not stored), from three
+signals:
+
+1. **Remaining time** until the deadline.
+2. **Outstanding effort** — estimated effort hours × (1 − progress).
+3. **Time pressure** — outstanding effort ÷ remaining time. A ratio ≥ 1 means there
+   isn't enough runway left at a normal pace.
+
+Those combine into four tiers (Critical / High / Medium / Low), with tasks overdue or
+due within a day always landing on Critical. The full logic (with comments) is in
+[`backend/app/urgency.py`](backend/app/urgency.py); the frontend mirrors it in
+[`frontend/src/lib/urgency.ts`](frontend/src/lib/urgency.ts) so form previews (like
+Quick Capture) can show the badge before saving.
+
+---
+
+## Notes & known limitations (Version 1.0 scope)
+
+- Accounts and JWT-based authentication are built in (see `backend/app/security.py`),
+  and Project Workspace supports multi-user collaboration (roles, permissions,
+  invitations). Account email verification and password-reset mail send via SMTP if
+  configured (see `backend/.env.example`); project **invitations** don't send email
+  yet, so invite links must still be shared manually.
+- Attachments are a placeholder field (comma-separated filenames) — no file upload yet
+  outside of Project Workspace documents/resources and AI Workspace project zips.
+- Notifications are checked while the tab is open, not via a push service, so the app
+  needs to be open (it can be in a background tab) for alerts to fire.
+- SQLite is file-based; back up `backend/dashboard.db` if you want to preserve data
+  across machines.
+- No automated test suite (frontend or backend) yet — see `AI_HANDOFF.md` for details.
     │   │   ├── tasks/               # TaskCard, TaskForm, TaskList, QuickCapture, UrgencyRing
     │   │   ├── timetable/            # WeeklyTimetable, TimetableCard, TimetableSlotForm
     │   │   ├── study-hub/             # Subjects, Assignments, Notes, Resources, Sessions
