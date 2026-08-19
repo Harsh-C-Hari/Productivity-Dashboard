@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,7 +53,17 @@ export function TaskForm({ mode, initial, onSubmit, onCancel, submitting }: Task
   const [deadline, setDeadline] = useState(toLocalInputValue(initial?.deadline ?? null));
   const [effort, setEffort] = useState(initial?.estimated_effort_hours ?? 1);
   const [status, setStatus] = useState<TaskStatus>(initial?.status ?? "todo");
-  const [progress, setProgress] = useState(initial?.progress ?? 0);
+    const [progress, setProgress] = useState(initial?.progress ?? 0);
+
+  // Forces the urgency preview below to re-evaluate "now" every minute,
+  // not just when the user edits a field -- otherwise a form left open
+  // for a while (Quick Capture especially) can keep showing a badge
+  // that's gone stale relative to the real, ever-approaching deadline.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => forceTick((t) => t + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const isoDeadline = deadline ? new Date(deadline).toISOString() : null;
   const previewUrgency = computeUrgency(isoDeadline, effort, progress, status);
