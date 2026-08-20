@@ -5,12 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/project-workspace/StatusBadge";
-import {
-  getTokenRefreshReminder,
-  setTokenRefreshReminder,
-  getTokenLimitedFlag,
-  setTokenLimitedFlag,
-} from "@/lib/aiWorkspaceMeta";
+import { useUpdateAIAccount } from "@/hooks/useAIAccounts";
 import {
   useAccountTokenTotal,
   useMarkAccountTokenLimited,
@@ -31,24 +26,37 @@ function formatDuration(ms: number): string {
 /**
  * Live countdown + quick actions for a single AI account's token
  * usage. The countdown is derived entirely from a reminder time the
- * *user* sets on this device (see lib/aiWorkspaceMeta.ts) -- there is
- * no `refresh_time` column on TokenTracker to read from, so this
- * never claims to know the real provider-side reset time.
+ * *user* sets (persisted on `AIAccount.token_refresh_reminder_at`,
+ * synced across every device/browser the account is opened from --
+ * see models.py) -- there is no real provider-side `refresh_time`
+ * anywhere in the system, so this never claims to know the actual
+ * reset time, only the user's own reminder for it.
  *
  * "Mark limited" / "Mark refreshed" call the existing best-effort
- * ActivityLog endpoints (token_trackers.py) so the workspace's
- * activity feed reflects it, without inventing new persisted state.
+ * ActivityLog endpoints (token_trackers.py) for the activity feed,
+ * *and* persist `is_token_limited` on the account itself so the
+ * "Limited" button's disabled state also follows the account across
+ * devices instead of resetting per-browser.
  */
-export function TokenRefreshCountdown({ accountId, accountName }: { accountId: string; accountName: string }) {
-  const [reminder, setReminder] = useState<string | null>(() => getTokenRefreshReminder(accountId));
+export function TokenRefreshCountdown({
+  accountId,
+  accountName,
+  reminderAt,
+  isLimited,
+}: {
+  accountId: string;
+  accountName: string;
+  reminderAt: string | null;
+  isLimited: boolean;
+}) {
   const [now, setNow] = useState(() => Date.now());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draftValue, setDraftValue] = useState("");
-  const [isLimited, setIsLimited] = useState<boolean>(() => getTokenLimitedFlag(accountId));
 
   const { data: total } = useAccountTokenTotal(accountId);
   const markLimited = useMarkAccountTokenLimited();
   const markRefreshed = useMarkAccountTokenRefreshed();
+  const updateAccount = useUpdateAIAccount();
 
   // Tick once a minute -- token refresh windows are hours, not seconds,
   // so a faster interval would just burn cycles for no visible benefit.
@@ -57,12 +65,7 @@ export function TokenRefreshCountdown({ accountId, accountName }: { accountId: s
     return () => window.clearInterval(id);
   }, []);
 
-  // Re-sync local state if this card gets reused for a different account.
-  useEffect(() => {
-    setReminder(getTokenRefreshReminder(accountId));
-    setIsLimited(getTokenLimitedFlag(accountId));
-  }, [accountId]);
-
+  const reminder = reminderAt;
   const remainingMs = reminder ? new Date(reminder).getTime() - now : null;
   const isOverdue = remainingMs !== null && remainingMs <= 0;
 
@@ -85,27 +88,22 @@ export function TokenRefreshCountdown({ accountId, accountName }: { accountId: s
   function handleSave() {
     if (!draftValue) return;
     const iso = new Date(draftValue).toISOString();
-    setTokenRefreshReminder(accountId, iso);
-    setReminder(iso);
+    updateAccount.mutate({ id: accountId, payload: { token_refresh_reminder_at: iso } });
     setDialogOpen(false);
   }
 
   function handleClearReminder() {
-    setTokenRefreshReminder(accountId, null);
-    setReminder(null);
+    updateAccount.mutate({ id: accountId, payload: { token_refresh_reminder_at: null } });
   }
 
   function handleMarkLimited() {
     markLimited.mutate(accountId);
-    setTokenLimitedFlag(accountId, true);
-    setIsLimited(true);
+    updateAccount.mutate({ id: accountId, payload: { is_token_limited: true } });
   }
 
   function handleMarkRefreshed() {
     markRefreshed.mutate(accountId);
-    setTokenLimitedFlag(accountId, false);
-    setIsLimited(false);
-    handleClearReminder();
+    updateAccount.mutate({ id: accountId, payload: { is_token_limited: false, token_refresh_reminder_at: null } });
   }
 
   return (
@@ -154,7 +152,7 @@ export function TokenRefreshCountdown({ accountId, accountName }: { accountId: s
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Gauge className="h-4 w-4" /> Token refresh reminder</DialogTitle>
             <DialogDescription>
-              A personal reminder for {accountName} -- stored on this device only, not synced to the backend.
+              A personal reminder for {accountName} -- synced to your account, so it shows up on every device.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
