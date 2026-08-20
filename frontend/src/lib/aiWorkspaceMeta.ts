@@ -76,97 +76,12 @@ export function setDefaultAccountId(id: string | null): void {
   }
 }
 
-// Client-side "token refresh reminder" per AI account. `TokenTracker`
-// has no `refresh_time`/`status`/`notify_*` columns (see
-// token_trackers.py's module docstring and AI_HANDOFF.md Known
-// Issues), so there is nothing to read a countdown from on the
-// backend. This is a *local reminder the user sets themselves*
-// ("my Claude usage resets at 9pm") -- not a value derived from any
-// server-side rate-limit state, and it's never presented as one.
-// Stored as a single map so it's one read/write instead of N.
-const TOKEN_REMINDER_KEY = "ai-workspace:token-refresh-reminders";
-
-type ReminderMap = Record<string, string>; // accountId -> ISO timestamp
-
-function loadReminderMap(): ReminderMap {
-  try {
-    return JSON.parse(localStorage.getItem(TOKEN_REMINDER_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveReminderMap(map: ReminderMap): void {
-  try {
-    localStorage.setItem(TOKEN_REMINDER_KEY, JSON.stringify(map));
-  } catch {
-    // Private browsing / storage disabled -- reminder just won't persist.
-  }
-}
-
-export function getTokenRefreshReminder(accountId: string): string | null {
-  return loadReminderMap()[accountId] ?? null;
-}
-
-export function getAllTokenRefreshReminders(): ReminderMap {
-  return loadReminderMap();
-}
-
-// Fired whenever a reminder is set/cleared, so any open list (e.g.
-// AIAccountsView, which sorts cards by soonest reminder) can react
-// immediately in the same tab -- the browser's built-in "storage"
-// event only fires in *other* tabs, never the one that made the change.
-export const REMINDERS_CHANGED_EVENT = "ai-workspace:reminders-changed";
-
-function notifyRemindersChanged(): void {
-  try {
-    window.dispatchEvent(new Event(REMINDERS_CHANGED_EVENT));
-  } catch {
-    // no-op outside a browser environment
-  }
-}
-
-export function setTokenRefreshReminder(accountId: string, isoTimestamp: string | null): void {
-  const map = loadReminderMap();
-  if (isoTimestamp) map[accountId] = isoTimestamp;
-  else delete map[accountId];
-  saveReminderMap(map);
-  notifyRemindersChanged();
-}
-
-// Client-side "marked as limited" flag per AI account. Mirrors the
-// reminder map above: `TokenTracker` has no persisted "is limited"
-// column to read back from the ActivityLog-backed mark-limited/mark-
-// refreshed endpoints, so the UI has no way to know the button was
-// already pressed. Tracking it locally lets the "Limited" button
-// disable itself once clicked, instead of staying clickable forever.
-const TOKEN_LIMITED_KEY = "ai-workspace:token-limited-accounts";
-
-type LimitedMap = Record<string, true>; // accountId -> marked-limited flag
-
-function loadLimitedMap(): LimitedMap {
-  try {
-    return JSON.parse(localStorage.getItem(TOKEN_LIMITED_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveLimitedMap(map: LimitedMap): void {
-  try {
-    localStorage.setItem(TOKEN_LIMITED_KEY, JSON.stringify(map));
-  } catch {
-    // Private browsing / storage disabled -- flag just won't persist.
-  }
-}
-
-export function getTokenLimitedFlag(accountId: string): boolean {
-  return !!loadLimitedMap()[accountId];
-}
-
-export function setTokenLimitedFlag(accountId: string, isLimited: boolean): void {
-  const map = loadLimitedMap();
-  if (isLimited) map[accountId] = true;
-  else delete map[accountId];
-  saveLimitedMap(map);
-}
+// Client-side "token refresh reminder" and "marked as limited" flag
+// per AI account used to live here as localStorage-only state (see
+// CHANGELOG.md / AI_HANDOFF.md Known Issues history). Both are now
+// real columns on AIAccount (token_refresh_reminder_at /
+// is_token_limited, see models.py) so a reminder set on one device
+// shows up on every other device/browser the same account is opened
+// from -- read/write goes through the normal AIAccount PATCH endpoint
+// via useUpdateAIAccount, not this file. See
+// components/ai-workspace/TokenRefreshCountdown.tsx.
