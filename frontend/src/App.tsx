@@ -40,6 +40,24 @@ function RouteFallback() {
   );
 }
 
+/** Matches AuthShell's actual layout (full-page centered, one
+ * max-w-md card) -- the generic RouteFallback above is shaped for
+ * AppLayout pages (a header strip + a big content area) and looks
+ * wrong here, showing two boxes for what's really just one card. */
+function AuthRouteFallback() {
+  return (
+    <div
+      className="flex min-h-dvh w-full items-center justify-center bg-base-950 px-4 py-10"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span className="sr-only">Loading page…</span>
+      <div className="glass-panel h-[420px] w-full max-w-md animate-pulse rounded-2xl bg-white/[0.02]" />
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -53,7 +71,7 @@ export default function App() {
                 <Route
                   path="login"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
+                    <Suspense fallback={<AuthRouteFallback />}>
                       <RedirectIfAuthenticated>
                         <Login />
                       </RedirectIfAuthenticated>
