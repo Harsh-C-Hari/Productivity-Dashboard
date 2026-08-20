@@ -775,6 +775,12 @@ class AIAccount(Base):
     # key itself. See module-level "Security" note above.
     api_key_env_var = Column(String(100), default="")
     current_task = Column(Text, default="")
+    # User-set "remind me when this account's usage resets" timestamp,
+    # and whether they've flagged it as currently limited. Promoted
+    # from a per-device localStorage-only value to real synced columns
+    # (additive migration in database.py's run_startup_migrations).
+    token_refresh_reminder_at = Column(UTCDateTime, nullable=True)
+    is_token_limited = Column(Boolean, default=False, nullable=False)
     created_at = Column(UTCDateTime, default=utc_now)
     updated_at = Column(UTCDateTime, default=utc_now, onupdate=utc_now)
 
