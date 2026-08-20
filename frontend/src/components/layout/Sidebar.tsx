@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, ListChecks, CalendarClock, Settings, GraduationCap, FolderKanban, Bot, Zap, LogOut, Bell } from "lucide-react";
+import { LayoutDashboard, ListChecks, CalendarClock, GraduationCap, FolderKanban, Bot, Zap, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
-import { useNotificationCounts } from "@/hooks/useNotificationCenter";
 import { ConfirmDialog } from "@/components/collaboration/ConfirmDialog";
 
 const NAV_ITEMS = [
@@ -13,13 +12,10 @@ const NAV_ITEMS = [
   { to: "/study-hub", label: "Study Hub", icon: GraduationCap },
   { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/ai-workspace", label: "AI Workspace", icon: Bot },
-  { to: "/notifications", label: "Notifications", icon: Bell },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const { user, logout } = useAuth();
-  const { data: counts } = useNotificationCounts();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -62,11 +58,6 @@ export function Sidebar() {
           >
             <Icon className="h-4 w-4" />
             <span className="flex-1">{label}</span>
-            {to === "/notifications" && !!counts?.unread && (
-              <span className="flex h-5 min-w-5 animate-in zoom-in-95 fade-in duration-200 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                {counts.unread > 99 ? "99+" : counts.unread}
-              </span>
-            )}
           </NavLink>
         ))}
       </nav>
