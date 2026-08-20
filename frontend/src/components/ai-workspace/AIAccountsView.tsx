@@ -218,7 +218,7 @@ function AIAccountCard({
             </div>
           </div>
 
-          <<TokenRefreshCountdown
+          <TokenRefreshCountdown
             accountId={account.id}
             accountName={account.name}
             reminderAt={account.token_refresh_reminder_at}
