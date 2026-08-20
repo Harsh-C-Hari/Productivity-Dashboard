@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { StatusBadge } from "@/components/project-workspace/StatusBadge";
 import { useUpdateAIAccount } from "@/hooks/useAIAccounts";
 import {
-  useAccountTokenTotal,
   useMarkAccountTokenLimited,
   useMarkAccountTokenRefreshed,
 } from "@/hooks/useTokenTrackers";
@@ -43,17 +42,25 @@ export function TokenRefreshCountdown({
   accountName,
   reminderAt,
   isLimited,
+  total,
 }: {
   accountId: string;
   accountName: string;
   reminderAt: string | null;
   isLimited: boolean;
+  // Passed down from the parent's single `useTokenUsageSummary()` call
+  // instead of each card fetching its own -- previously every card in
+  // the list ran its own `/api/token-trackers/accounts/{id}/total`
+  // request, so a list of N accounts meant N extra network round
+  // trips (each its own cold-ish serverless invocation + DB
+  // connection) on every page load. One shared summary request covers
+  // every account's totals at once.
+  total?: { total_tokens: number; total_estimated_cost_usd: number };
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draftValue, setDraftValue] = useState("");
 
-  const { data: total } = useAccountTokenTotal(accountId);
   const markLimited = useMarkAccountTokenLimited();
   const markRefreshed = useMarkAccountTokenRefreshed();
   const updateAccount = useUpdateAIAccount();
