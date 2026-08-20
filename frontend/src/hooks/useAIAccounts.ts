@@ -65,13 +65,36 @@ export function useCreateAIAccount() {
 }
 
 export function useUpdateAIAccount() {
+  const qc = useQueryClient();
   const invalidate = useInvalidateAIAccounts();
   const { toast } = useNotifications();
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: Partial<AIAccountInput> }) =>
       api.updateAIAccount(id, payload),
-    onSuccess: () => invalidate(),
-    onError: (err: Error) => toast(err.message || "Couldn't update AI account", "error"),
+    onMutate: async ({ id, payload }) => {
+      await qc.cancelQueries({ queryKey: AI_ACCOUNTS_KEY });
+      await qc.cancelQueries({ queryKey: AI_ACCOUNT_SUMMARIES_KEY });
+
+      const previousAccountLists = qc.getQueriesData<AIAccount[]>({ queryKey: AI_ACCOUNTS_KEY });
+      const previousSummaryLists = qc.getQueriesData<AIAccountSummary[]>({ queryKey: AI_ACCOUNT_SUMMARIES_KEY });
+
+      qc.setQueriesData<AIAccount[]>(
+        { queryKey: AI_ACCOUNTS_KEY, predicate: (query) => Array.isArray(query.state.data) },
+        (old) => old?.map((a) => (a.id === id ? { ...a, ...payload } : a))
+      );
+      qc.setQueriesData<AIAccountSummary[]>(
+        { queryKey: AI_ACCOUNT_SUMMARIES_KEY, predicate: (query) => Array.isArray(query.state.data) },
+        (old) => old?.map((s) => (s.account.id === id ? { ...s, account: { ...s.account, ...payload } } : s))
+      );
+
+      return { previousAccountLists, previousSummaryLists };
+    },
+    onError: (err: Error, _vars, context) => {
+      context?.previousAccountLists?.forEach(([key, data]) => qc.setQueryData(key, data));
+      context?.previousSummaryLists?.forEach(([key, data]) => qc.setQueryData(key, data));
+      toast(err.message || "Couldn't update AI account", "error");
+    },
+    onSettled: () => invalidate(),
   });
 }
 
