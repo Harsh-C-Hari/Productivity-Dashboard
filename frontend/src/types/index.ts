@@ -659,6 +659,8 @@ export interface AIAccount {
   status: AIAccountStatus;
   api_key_env_var: string;
   current_task: string;
+  token_refresh_reminder_at: string | null;
+  is_token_limited: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -673,6 +675,8 @@ export interface AIAccountInput {
   status?: AIAccountStatus;
   api_key_env_var?: string;
   current_task?: string;
+  token_refresh_reminder_at?: string | null;
+  is_token_limited?: boolean;
 }
 
 export interface AIAccountSummary {
