@@ -17,12 +17,21 @@ import {
   useDeleteAIAccount,
   useTouchAIAccount,
 } from "@/hooks/useAIAccounts";
+import { useTokenUsageSummary } from "@/hooks/useTokenTrackers";
 import { AI_PROVIDER_META, AI_ACCOUNT_STATUS_META, AI_PROVIDER_OPTIONS, AI_ACCOUNT_STATUS_OPTIONS, getDefaultAccountId, setDefaultAccountId } from "@/lib/aiWorkspaceMeta";
 import type { AIAccount, AIAccountInput, AIAccountSummary } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 
 export function AIAccountsView() {
   const { data: summaries, isLoading } = useAIAccountSummaries();
+  const { data: usageSummary } = useTokenUsageSummary();
+  const tokenTotalsByAccount = useMemo(() => {
+    const map = new Map<string, { total_tokens: number; total_estimated_cost_usd: number }>();
+    for (const row of usageSummary?.by_account ?? []) {
+      map.set(row.ai_account_id, { total_tokens: row.total_tokens, total_estimated_cost_usd: row.total_estimated_cost_usd });
+    }
+    return map;
+  }, [usageSummary]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [addOpen, setAddOpen] = useState(false);
@@ -117,6 +126,7 @@ export function AIAccountsView() {
               summary={summary}
               isDefault={summary.account.id === defaultId}
               onSetDefault={() => handleSetDefault(summary.account.id)}
+              tokenTotal={tokenTotalsByAccount.get(summary.account.id)}
             />
           ))}
         </AnimatePresence>
@@ -139,10 +149,12 @@ function AIAccountCard({
   summary,
   isDefault,
   onSetDefault,
+  tokenTotal,
 }: {
   summary: AIAccountSummary;
   isDefault: boolean;
   onSetDefault: () => void;
+  tokenTotal?: { total_tokens: number; total_estimated_cost_usd: number };
 }) {
   const { account } = summary;
   const [editOpen, setEditOpen] = useState(false);
@@ -223,6 +235,7 @@ function AIAccountCard({
             accountName={account.name}
             reminderAt={account.token_refresh_reminder_at}
             isLimited={account.is_token_limited}
+            total={tokenTotal}
           />
           <div className="flex items-center justify-between pt-1">
             <button
