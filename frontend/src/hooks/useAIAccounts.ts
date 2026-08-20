@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { AIAccountInput, AIProvider, AIAccountStatus } from "@/types";
+import type { AIAccount, AIAccountInput, AIAccountSummary, AIProvider, AIAccountStatus } from "@/types";
 import { useNotifications } from "@/context/NotificationContext";
 
 export const AI_ACCOUNTS_KEY = ["ai-accounts"] as const;
