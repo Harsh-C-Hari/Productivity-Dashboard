@@ -98,16 +98,29 @@ _OWNERSHIP_COLUMNS = [
     ("knowledge_articles", "user_id", "VARCHAR"),
 ]
 
+# (table_name, column_name, column_ddl_type) for the token-refresh-
+# reminder additive migration -- promotes AIAccount.token_refresh_
+# reminder_at / is_token_limited from a per-device localStorage-only
+# value (see aiWorkspaceMeta.ts / token_trackers.py's module docstring)
+# to real columns, so a reminder set on one device/browser is visible
+# on every other device the same account is opened from. Same dumb
+# ADD-COLUMN-IF-MISSING pattern as _OWNERSHIP_COLUMNS above, kept as
+# its own list so each migration's purpose stays self-documenting.
+_REMINDER_COLUMNS = [
+    ("ai_accounts", "token_refresh_reminder_at", "TIMESTAMP"),
+    ("ai_accounts", "is_token_limited", "BOOLEAN NOT NULL DEFAULT FALSE"),
+]
+
 
 def run_startup_migrations() -> None:
-    """Adds any ownership columns that don't exist yet on the current
-    database. Safe to call on every startup (including a brand-new
-    database, where the columns already exist and every check here is a
-    no-op) and safe to call more than once."""
+    """Adds any ownership/reminder columns that don't exist yet on the
+    current database. Safe to call on every startup (including a
+    brand-new database, where the columns already exist and every
+    check here is a no-op) and safe to call more than once."""
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
     with engine.begin() as conn:
-        for table, column, col_type in _OWNERSHIP_COLUMNS:
+        for table, column, col_type in _OWNERSHIP_COLUMNS + _REMINDER_COLUMNS:
             if table not in existing_tables:
                 # Fresh database -- create_all already made this table
                 # with the column included, nothing to migrate.
