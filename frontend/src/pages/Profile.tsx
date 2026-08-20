@@ -10,6 +10,7 @@ import {
   Save,
   MailCheck,
   Camera,
+  Settings,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,12 +55,34 @@ export default function Profile() {
       transition={{ duration: 0.3 }}
       className="flex flex-col gap-4 max-w-2xl"
     >
+      <SettingsLinkCard />
       <ProfileInfoCard />
       <EmailCard />
       <PasswordCard />
       <SessionsCard />
       <DangerZoneCard />
     </motion.div>
+  );
+}
+
+function SettingsLinkCard() {
+  return (
+    <Card>
+      <CardContent className="flex items-center justify-between gap-3 py-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Settings className="h-4.5 w-4.5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Settings</p>
+            <p className="truncate text-xs text-muted-foreground">Preferences and other dashboard options</p>
+          </div>
+        </div>
+        <Button asChild variant="secondary" size="sm">
+          <Link to="/settings">Open</Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
