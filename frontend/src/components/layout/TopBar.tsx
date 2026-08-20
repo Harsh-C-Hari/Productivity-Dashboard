@@ -80,7 +80,7 @@ export function TopBar() {
         <NavLink
           to="/notifications"
           title="Notifications"
-          className="relative hidden md:flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-muted-foreground transition-colors hover:text-foreground hover:bg-white/5"
+          className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-muted-foreground transition-colors hover:text-foreground hover:bg-white/5"
         >
           <Bell className="h-4 w-4" />
           {!!counts?.unread && (
