@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { useAIAccounts } from "./useAIAccounts";
-import { getAllTokenRefreshReminders } from "@/lib/aiWorkspaceMeta";
 import { useNotifications } from "@/context/NotificationContext";
 
 const STORAGE_KEY = "ai-workspace:notified-token-events";
@@ -26,16 +25,18 @@ function saveLog(log: NotifiedLog) {
 }
 
 /**
- * Polls the *user-set* token refresh reminders (see
- * lib/aiWorkspaceMeta.ts) and fires a browser notification:
+ * Polls the *user-set* token refresh reminders (now persisted on each
+ * `AIAccount.token_refresh_reminder_at`, synced across every device --
+ * see models.py / TokenRefreshCountdown.tsx) and fires a browser
+ * notification:
  *  - once when a reminder enters its final 15 minutes ("expiring soon")
  *  - once when a reminder's time is reached ("token refreshed")
  *
  * Mirrors useNotificationScheduler.ts's task-deadline pattern exactly,
  * reusing the same NotificationContext rather than a parallel system.
- * These reminders are client-side only (no backend refresh_time
- * column exists -- see TokenRefreshCountdown.tsx), so the copy below
- * is deliberately framed as "your reminder", not a real usage event.
+ * These are reminders the user set themselves, not a real provider-
+ * side usage event, so the copy below is deliberately framed as "your
+ * reminder".
  */
 export function useTokenRefreshScheduler() {
   const { data: accounts } = useAIAccounts();
@@ -47,11 +48,10 @@ export function useTokenRefreshScheduler() {
 
     const check = () => {
       const now = Date.now();
-      const reminders = getAllTokenRefreshReminders();
       let changed = false;
 
       for (const account of accounts) {
-        const iso = reminders[account.id];
+        const iso = account.token_refresh_reminder_at;
         if (!iso) continue;
         const targetMs = new Date(iso).getTime();
         const minutesLeft = (targetMs - now) / 1000 / 60;
