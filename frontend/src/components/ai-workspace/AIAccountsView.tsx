@@ -17,7 +17,7 @@ import {
   useDeleteAIAccount,
   useTouchAIAccount,
 } from "@/hooks/useAIAccounts";
-import { AI_PROVIDER_META, AI_ACCOUNT_STATUS_META, AI_PROVIDER_OPTIONS, AI_ACCOUNT_STATUS_OPTIONS, getDefaultAccountId, setDefaultAccountId, getAllTokenRefreshReminders, REMINDERS_CHANGED_EVENT } from "@/lib/aiWorkspaceMeta";
+import { AI_PROVIDER_META, AI_ACCOUNT_STATUS_META, AI_PROVIDER_OPTIONS, AI_ACCOUNT_STATUS_OPTIONS, getDefaultAccountId, setDefaultAccountId } from "@/lib/aiWorkspaceMeta";
 import type { AIAccount, AIAccountInput, AIAccountSummary } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 
@@ -30,16 +30,6 @@ export function AIAccountsView() {
 
   useEffect(() => {
     setDefaultIdState(getDefaultAccountId());
-  }, []);
-
-  // Bumped whenever a token-refresh reminder is set/cleared (see
-  // TokenRefreshCountdown), so the card order below re-sorts right
-  // away instead of waiting for some unrelated re-render.
-  const [remindersTick, setRemindersTick] = useState(0);
-  useEffect(() => {
-    const bump = () => setRemindersTick((t) => t + 1);
-    window.addEventListener(REMINDERS_CHANGED_EVENT, bump);
-    return () => window.removeEventListener(REMINDERS_CHANGED_EVENT, bump);
   }, []);
 
   const filtered = useMemo(() => {
@@ -55,18 +45,21 @@ export function AIAccountsView() {
     // fall back to the old "most recently updated" order, after every
     // account that does have one) -- the default-starred account, if
     // any, still always stays pinned at the very top regardless.
-    const reminders = getAllTokenRefreshReminders();
+    // Reminder now comes straight off the account (synced via the
+    // backend, see TokenRefreshCountdown/models.py), so summaries
+    // refetching after a save is what keeps this in sync -- no
+    // separate local "reminders changed" event needed anymore.
     return [...list].sort((a, b) => {
       if (a.account.id === defaultId) return -1;
       if (b.account.id === defaultId) return 1;
-      const aReminder = reminders[a.account.id];
-      const bReminder = reminders[b.account.id];
+      const aReminder = a.account.token_refresh_reminder_at;
+      const bReminder = b.account.token_refresh_reminder_at;
       if (aReminder && bReminder) return new Date(aReminder).getTime() - new Date(bReminder).getTime();
       if (aReminder) return -1;
       if (bReminder) return 1;
       return new Date(b.account.updated_at).getTime() - new Date(a.account.updated_at).getTime();
     });
-  }, [summaries, search, statusFilter, defaultId, remindersTick]);
+  }, [summaries, search, statusFilter, defaultId]);
   function handleSetDefault(id: string) {
     const next = defaultId === id ? null : id;
     setDefaultAccountId(next);
@@ -225,8 +218,12 @@ function AIAccountCard({
             </div>
           </div>
 
-          <TokenRefreshCountdown accountId={account.id} accountName={account.name} />
-
+          <<TokenRefreshCountdown
+            accountId={account.id}
+            accountName={account.name}
+            reminderAt={account.token_refresh_reminder_at}
+            isLimited={account.is_token_limited}
+          />
           <div className="flex items-center justify-between pt-1">
             <button
               onClick={() => touchAccount.mutate(account.id)}
