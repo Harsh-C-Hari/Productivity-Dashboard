@@ -6,6 +6,7 @@ Run with:  uvicorn app.main:app --reload --port 8000
 import os
 from pathlib import Path
 from datetime import datetime, timedelta
+from sqlalchemy import text
 
 from dotenv import load_dotenv
 
@@ -201,7 +202,19 @@ app.include_router(dashboard.router)  # registered last since it depends on stud
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok"}
+    """Liveness check that also touches the database -- not just the
+    Vercel function. A static response only keeps the serverless
+    function warm; it does nothing to stop Supabase's free-tier
+    project from auto-pausing after inactivity, and doesn't keep a
+    real Postgres connection warm through the pooler either. This is
+    the one endpoint safe to point an external uptime monitor at (no
+    auth, no side effects) to cover both."""
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    finally:
+        db.close()
 
 
 def _seed_if_empty():
