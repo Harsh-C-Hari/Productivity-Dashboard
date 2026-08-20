@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, NavLink } from "react-router-dom";
-import { Bell, BellOff, BellRing, LogOut } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNotifications } from "@/context/NotificationContext";
 import { useAuth } from "@/context/AuthContext";
 import { useNotificationCounts } from "@/hooks/useNotificationCenter";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
@@ -38,7 +37,6 @@ function resolveTitleMeta(pathname: string) {
 
 export function TopBar() {
   const { pathname } = useLocation();
-  const { permission, requestPermission } = useNotifications();
   const { user, logout } = useAuth();
   const { data: counts } = useNotificationCounts();
   const [now, setNow] = useState(new Date());
@@ -89,27 +87,6 @@ export function TopBar() {
             </span>
           )}
         </NavLink>
-
-        {permission === "granted" ? (
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-urgency-low/30 bg-urgency-low/10 text-urgency-low"
-            title="Deadline notifications are on"
-          >
-            <BellRing className="h-4 w-4" />
-          </div>
-        ) : permission === "unsupported" ? (
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-muted-foreground/50"
-            title="Notifications aren't supported in this browser"
-          >
-            <BellOff className="h-4 w-4" />
-          </div>
-        ) : (
-          <Button variant="secondary" size="sm" onClick={requestPermission} className="gap-1.5">
-            <Bell className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Enable alerts</span>
-          </Button>
-        )}
 
         {user && (
           <NavLink
