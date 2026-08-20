@@ -924,6 +924,8 @@ class AIAccountBase(BaseModel):
     status: AIAccountStatus = AIAccountStatus.active
     api_key_env_var: str = Field(default="", max_length=100)
     current_task: str = ""
+    token_refresh_reminder_at: Optional[datetime] = None
+    is_token_limited: bool = False
 
     @field_validator("api_key_env_var")
     @classmethod
@@ -951,6 +953,8 @@ class AIAccountUpdate(BaseModel):
     status: Optional[AIAccountStatus] = None
     api_key_env_var: Optional[str] = Field(default=None, max_length=100)
     current_task: Optional[str] = None
+    token_refresh_reminder_at: Optional[datetime] = None
+    is_token_limited: Optional[bool] = None
 
     @field_validator("api_key_env_var")
     @classmethod
