@@ -200,7 +200,7 @@ app.include_router(search.router)  # registered after AI Workspace since global 
 app.include_router(dashboard.router)  # registered last since it depends on study_hub + project_workspace helpers
 
 
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def health_check():
     """Liveness check that also touches the database -- not just the
     Vercel function. A static response only keeps the serverless
