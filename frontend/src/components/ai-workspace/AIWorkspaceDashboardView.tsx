@@ -56,8 +56,14 @@ export function AIWorkspaceDashboardView() {
 
   if (isLoading || !summary) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[...Array(8)].map((_, i) => <div key={i} className="glass-card h-28 animate-pulse bg-white/[0.02]" />)}
+      <div className="flex flex-col gap-6" role="status" aria-live="polite" aria-busy="true">
+        <span className="sr-only">Loading AI workspace…</span>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[...Array(8)].map((_, i) => <div key={i} className="glass-card h-28 animate-pulse bg-white/[0.02]" />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[...Array(2)].map((_, i) => <div key={i} className="glass-card h-56 animate-pulse bg-white/[0.02]" />)}
+        </div>
       </div>
     );
   }

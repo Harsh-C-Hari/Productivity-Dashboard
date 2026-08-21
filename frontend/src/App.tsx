@@ -58,6 +58,23 @@ function AuthRouteFallback() {
   );
 }
 
+/** Matches InvitationLanding's own layout (full-page centered,
+ * one max-w-md glass-card) -- same reasoning as AuthRouteFallback,
+ * just a different card class/size to match that page exactly. */
+function InvitationRouteFallback() {
+  return (
+    <div
+      className="min-h-dvh flex items-center justify-center bg-base-950 px-4 py-10"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <span className="sr-only">Loading invitation…</span>
+      <div className="w-full max-w-md glass-card h-[380px] animate-pulse bg-white/[0.02]" />
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -81,7 +98,7 @@ export default function App() {
                 <Route
                   path="register"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
+                    <Suspense fallback={<AuthRouteFallback />}>
                       <RedirectIfAuthenticated>
                         <Register />
                       </RedirectIfAuthenticated>
@@ -91,7 +108,7 @@ export default function App() {
                 <Route
                   path="forgot-password"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
+                    <Suspense fallback={<AuthRouteFallback />}>
                       <RedirectIfAuthenticated>
                         <ForgotPassword />
                       </RedirectIfAuthenticated>
@@ -101,7 +118,7 @@ export default function App() {
                 <Route
                   path="reset-password"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
+                    <Suspense fallback={<AuthRouteFallback />}>
                       <ResetPassword />
                     </Suspense>
                   }
@@ -112,7 +129,7 @@ export default function App() {
                 <Route
                   path="verify-email"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
+                    <Suspense fallback={<AuthRouteFallback />}>
                       <VerifyEmail />
                     </Suspense>
                   }
@@ -125,7 +142,7 @@ export default function App() {
                 <Route
                   path="invite/:token"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
+                    <Suspense fallback={<InvitationRouteFallback />}>
                       <InvitationLanding />
                     </Suspense>
                   }

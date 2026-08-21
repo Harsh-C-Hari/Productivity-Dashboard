@@ -40,9 +40,22 @@ export default function ProjectDetail() {
 
   if (isLoading || !project) {
     return (
-      <div className="flex flex-col gap-4">
-        <div className="glass-card h-24 animate-pulse bg-white/[0.02]" />
-        <div className="glass-card h-96 animate-pulse bg-white/[0.02]" />
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-3">
+          <div className="glass-card h-28 animate-pulse bg-white/[0.02]" />
+          <div className="h-6 w-2/3 animate-pulse rounded-lg bg-white/[0.02]" />
+        </div>
+        <div className="h-9 w-full max-w-2xl animate-pulse rounded-lg bg-white/[0.02]" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 flex flex-col gap-4">
+            <div className="glass-card h-56 animate-pulse bg-white/[0.02]" />
+            <div className="glass-card h-56 animate-pulse bg-white/[0.02]" />
+          </div>
+          <div className="flex flex-col gap-4">
+            <div className="glass-card h-56 animate-pulse bg-white/[0.02]" />
+            <div className="glass-card h-56 animate-pulse bg-white/[0.02]" />
+          </div>
+        </div>
       </div>
     );
   }

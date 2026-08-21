@@ -23,10 +23,49 @@ export default function Dashboard() {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className="glass-card h-72 animate-pulse bg-white/[0.02]" />
-        ))}
+      <div className="flex flex-col gap-4" role="status" aria-live="polite" aria-busy="true">
+        <span className="sr-only">Loading dashboard…</span>
+
+        {/* Quick stats row */}
+        <div className="glass-card h-28 animate-pulse bg-white/[0.02]" />
+
+        {/* Today / Overdue / Upcoming tasks */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="glass-card h-56 animate-pulse bg-white/[0.02]" />
+          ))}
+        </div>
+
+        {/* Subjects progress, then assignments/sessions row */}
+        <div className="glass-card h-40 animate-pulse bg-white/[0.02]" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="glass-card h-56 animate-pulse bg-white/[0.02]" />
+          ))}
+        </div>
+
+        {/* Projects progress, then phase/milestone row, then bugs/timeline row */}
+        <div className="glass-card h-40 animate-pulse bg-white/[0.02]" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="glass-card h-56 animate-pulse bg-white/[0.02]" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="glass-card h-56 animate-pulse bg-white/[0.02]" />
+          ))}
+        </div>
+
+        {/* Notifications + AI workspace row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="glass-card h-48 animate-pulse bg-white/[0.02]" />
+          ))}
+        </div>
+
+        {/* Recent activity */}
+        <div className="glass-card h-64 animate-pulse bg-white/[0.02]" />
       </div>
     );
   }

@@ -78,7 +78,21 @@ export function AIAnalyticsView() {
   const { data: tokenLimits } = useTokenLimitsReached();
 
   if (summaryLoading || !summary) {
-    return <div className="py-16 text-center text-sm text-muted-foreground">Crunching numbers…</div>;
+    return (
+      <div className="flex flex-col gap-4" role="status" aria-live="polite" aria-busy="true">
+        <span className="sr-only">Loading analytics…</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-20 animate-pulse rounded-xl border border-white/10 bg-white/[0.02]" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="glass-card h-56 animate-pulse bg-white/[0.02]" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
   const providerData = (perProvider ?? []).map((p) => ({

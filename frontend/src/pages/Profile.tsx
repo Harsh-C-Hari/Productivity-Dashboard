@@ -443,8 +443,11 @@ function SessionsCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {isLoading ? (
-          <div className="flex justify-center py-4">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="flex flex-col gap-3" role="status" aria-live="polite" aria-busy="true">
+            <span className="sr-only">Loading sessions…</span>
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="h-14 animate-pulse rounded-xl border border-white/10 bg-white/[0.02]" />
+            ))}
           </div>
         ) : sorted.length === 0 ? (
           <p className="text-sm text-muted-foreground">No active sessions.</p>
