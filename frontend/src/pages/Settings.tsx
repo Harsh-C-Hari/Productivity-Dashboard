@@ -4,6 +4,7 @@ import { Bell, BellRing, Info, Palette, Github, MonitorSmartphone } from "lucide
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { api } from "@/lib/api";
 import { useNotifications } from "@/context/NotificationContext";
 import {
   getDevicePushState,
@@ -55,6 +56,27 @@ export default function Settings() {
       toast(err instanceof Error ? err.message : "Could not disable background alerts", "warning");
     } finally {
       setPushState(await getDevicePushState());
+      setPushBusy(false);
+    }
+  }
+
+  async function sendTestPush() {
+    setPushBusy(true);
+    try {
+      const result = await api.sendTestPush();
+      if (result.sent > 0) {
+        toast(
+          result.sent === 1
+            ? "Test push sent — check your notifications"
+            : `Test push sent to ${result.sent} devices`,
+          "success"
+        );
+      } else {
+        toast("No device accepted the test push — try disabling and re-enabling", "warning");
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Test push failed", "warning");
+    } finally {
       setPushBusy(false);
     }
   }
@@ -132,7 +154,7 @@ export default function Settings() {
               ) : (
                 <MonitorSmartphone className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
                   {!pushState
                     ? "Checking this device…"
@@ -143,21 +165,32 @@ export default function Settings() {
                     : "Receive alerts even when closed"}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  Web Push · installed app, works offline of the browser
+                  Web Push · alerts even with the app closed
                 </p>
               </div>
             </div>
             {pushState?.supported && (
               pushState.subscribed ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pushBusy}
-                  onClick={disableBackgroundAlerts}
-                  className="w-full sm:w-auto"
-                >
-                  Disable
-                </Button>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={pushBusy}
+                    onClick={sendTestPush}
+                    className="w-full sm:w-auto"
+                  >
+                    Send test push
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={pushBusy}
+                    onClick={disableBackgroundAlerts}
+                    className="w-full sm:w-auto"
+                  >
+                    Disable
+                  </Button>
+                </div>
               ) : (
                 <Button
                   size="sm"

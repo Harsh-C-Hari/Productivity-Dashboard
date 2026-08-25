@@ -163,6 +163,62 @@ def delete_subscription(
     return {"ok": True, "deleted": deleted}
 
 
+@router.post("/test")
+def send_test_push(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Push a test notification to every device the caller subscribed, so
+    background delivery can be verified from Settings without staging a task
+    deadline. Same send/prune path as the dispatcher -- if this arrives, the
+    real deadline alerts will too."""
+    vapid_claims = _vapid_claims()
+    if vapid_claims is None:
+        raise HTTPException(status_code=503, detail="Push not configured (VAPID_PRIVATE_KEY missing)")
+
+    subs = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.user_id == current_user.id)
+        .all()
+    )
+    message = json.dumps(
+        {
+            "title": "Test notification",
+            "body": "Background delivery works -- this arrived through the push pipeline.",
+            "url": "/",
+        }
+    )
+    sent = 0
+    pruned = 0
+    failed = 0
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": sub.endpoint,
+                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                },
+                data=message,
+                ttl=PUSH_TTL_SECONDS,
+                vapid_private_key=os.environ.get("VAPID_PRIVATE_KEY", ""),
+                vapid_claims=vapid_claims,
+            )
+            sub.last_used_at = utc_now()
+            sent += 1
+        except WebPushException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status in (404, 410):
+                # Dead subscription -- prune so Settings stops counting it.
+                db.delete(sub)
+                pruned += 1
+            else:
+                failed += 1
+        except Exception:
+            failed += 1
+    db.commit()
+    return {"sent": sent, "pruned": pruned, "failed": failed}
+
+
 def _collect_task_events(db: Session, user_id: str, now) -> List[Tuple[str, str, str, str]]:
     """(dedup_key, title, body, url) tuples for tasks entering their final
     hour / first going overdue. Mirrors useNotificationScheduler.ts line

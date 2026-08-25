@@ -1161,4 +1161,8 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify({ endpoint }),
     }),
+  sendTestPush: () =>
+    request<{ sent: number; pruned: number; failed: number }>("/api/push/test", {
+      method: "POST",
+    }),
 };
