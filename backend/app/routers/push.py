@@ -234,7 +234,10 @@ def _collect_token_events(db: Session, user_id: str, now) -> List[Tuple[str, str
     return events
 
 
-@router.api_route("/dispatch", methods=["GET", "POST"])
+# HEAD exists for uptime monitors: many probe with HEAD by default, and
+# FastAPI (unlike raw Starlette) doesn't grant HEAD to GET routes for free.
+# Each probe then doubles as a real dispatch tick instead of a 405.
+@router.api_route("/dispatch", methods=["GET", "HEAD", "POST"])
 def dispatch_push_notifications(
     x_dispatch_secret: Optional[str] = Header(default=None),
     key: Optional[str] = Query(default=None),
