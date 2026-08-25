@@ -904,3 +904,11 @@ export interface TokenLimitsReached {
   count: number;
   events: { message: string; created_at: string }[];
 }
+
+// Web Push subscription as the browser hands it back from
+// pushManager.subscribe().toJSON() -- posted verbatim to
+// /api/push/subscriptions (routers/push.py).
+export interface PushSubscriptionInput {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}

@@ -79,6 +79,7 @@ import type {
   ProviderUsage,
   ConversationStatusCount,
   TokenLimitsReached,
+  PushSubscriptionInput,
 } from "@/types";
 import type {
   User,
@@ -1146,4 +1147,18 @@ export const api = {
     request<NotificationCounts>("/api/notifications/mark-all-read", { method: "POST" }),
   deleteNotification: (id: string) =>
     request<void>(`/api/notifications/${id}`, { method: "DELETE" }),
+
+  // ==================================================================
+  // Web Push subscriptions (routers/push.py)
+  // ==================================================================
+  createPushSubscription: (payload: PushSubscriptionInput) =>
+    request<{ ok: boolean }>("/api/push/subscriptions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  deletePushSubscription: (endpoint: string) =>
+    request<{ ok: boolean; deleted: number }>("/api/push/subscriptions", {
+      method: "DELETE",
+      body: JSON.stringify({ endpoint }),
+    }),
 };

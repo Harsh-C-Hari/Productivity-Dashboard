@@ -1908,3 +1908,28 @@ class InvitationPreviewOut(ProjectInvitationOut):
     project_color: str = ""
     invited_by_name: Optional[str] = None
     role_name: Optional[str] = None
+
+
+# ======================================================================
+# Web Push subscriptions (routers/push.py). The frontend posts the raw
+# PushSubscription.toJSON() shape a browser hands back from
+# pushManager.subscribe(): an `endpoint` URL plus the two RFC 8291
+# message-encryption keys. Nothing else about the subscription is
+# stored -- no capability metadata, since the dispatcher only ever
+# needs these three values to encrypt and deliver a message.
+# ======================================================================
+
+class PushSubscriptionKeys(BaseModel):
+    # Real values are ~90 and ~25 base64url chars; the cap just stops an
+    # authenticated user parking arbitrarily large blobs per subscription.
+    p256dh: str = Field(..., min_length=1, max_length=512)
+    auth: str = Field(..., min_length=1, max_length=512)
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str = Field(..., min_length=1, max_length=2000)
+    keys: PushSubscriptionKeys
+
+
+class PushSubscriptionDelete(BaseModel):
+    endpoint: str = Field(..., min_length=1, max_length=2000)

@@ -1,0 +1,37 @@
+name: Push dispatch
+
+# Fallback scheduler for background push notifications: pings the deployed
+# backend's /api/push/dispatch every 5 minutes so deadline/token reminders
+# reach the installed PWA even with every browser/app closed.
+#
+# Primary trigger is the user's uptime-bot monitor hitting
+# /api/push/dispatch?key=<DISPATCH_SECRET> directly; this workflow stays
+# inert (skips, no failures) until BOTH repository secrets exist:
+#   DISPATCH_SECRET -- same value as the backend's DISPATCH_SECRET env var
+#   APP_URL         -- e.g. https://productivity-dashboard-phi-navy.vercel.app
+# Dispatch is idempotent server-side (per-user dedup log), so this and the
+# uptime bot can overlap freely without double-notifying.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # GitHub minimum interval; runs on the default branch only
+  workflow_dispatch: {} # manual "Run workflow" button -- handy for testing
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    env:
+      DISPATCH_SECRET: ${{ secrets.DISPATCH_SECRET }}
+      APP_URL: ${{ secrets.APP_URL }}
+    steps:
+      - name: Skip until repository secrets are configured
+        if: env.DISPATCH_SECRET == '' || env.APP_URL == ''
+        run: echo "DISPATCH_SECRET/APP_URL not set yet -- nothing to do."
+
+      - name: Trigger backend push dispatch
+        if: env.DISPATCH_SECRET != '' && env.APP_URL != ''
+        run: |
+          curl -sS --fail-with-body -m 55 \
+            -X POST "${APP_URL}/api/push/dispatch" \
+            -H "Content-Type: application/json" \
+            -H "x-dispatch-secret: ${DISPATCH_SECRET}"

@@ -70,6 +70,7 @@ from .routers import (
     activity,
     auth,
     sessions,
+    push,
 )
 
 # `RUN_STARTUP_TASKS` (default "true") gates `create_all` + the
@@ -195,6 +196,12 @@ app.include_router(user_preferences.router)
 app.include_router(notification_preferences.router)
 app.include_router(notifications.router)
 app.include_router(activity.router)
+
+# Web Push (background delivery for the installed PWA): per-device
+# subscription storage plus the shared-secret dispatch endpoint an
+# external pinger (uptime bot / GitHub Actions) calls every few minutes.
+# `/api/push` collides with nothing, so ordering is irrelevant here.
+app.include_router(push.router)
 
 app.include_router(search.router)  # registered after AI Workspace since global search now spans it too
 app.include_router(dashboard.router)  # registered last since it depends on study_hub + project_workspace helpers

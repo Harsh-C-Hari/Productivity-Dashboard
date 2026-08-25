@@ -24,6 +24,13 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
+        // Web Push handlers live in public/push-sw.js, loaded by the
+        // generated SW via importScripts (workbox's supported way to add a
+        // push listener without leaving generateSW mode). It must stay out
+        // of the precache manifest since it's imported directly, not
+        // revisioned.
+        globIgnores: ["**/push-sw.js"],
+        importScripts: ["/push-sw.js"],
       },
     }),
   ],

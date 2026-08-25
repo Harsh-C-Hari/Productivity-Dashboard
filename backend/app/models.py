@@ -1306,3 +1306,50 @@ class Notification(Base):
     user = relationship("User", back_populates="notifications")
     project = relationship("Project")
     invitation = relationship("ProjectInvitation")
+
+
+class PushSubscription(Base):
+    """One Web Push subscription per browser/device where the user turned
+    on background delivery (Settings page). The `endpoint` URL is unique
+    per browser profile, hence unique=True; a user with several devices
+    (phone + laptop, ...) gets one row per device, and the dispatcher in
+    routers/push.py fans each notification out to all of them. Rows whose
+    device has gone away (cleared site data, uninstalled PWA) are pruned
+    automatically when the push service answers 404/410 Gone.
+
+    Additive table -- nothing existing is modified. Created by the usual
+    `create_all` cold-start path in main.py, like every other table."""
+    __tablename__ = "push_subscriptions"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    endpoint = Column(Text, nullable=False, unique=True)
+    # Web Push message-encryption keys (RFC 8291), base64url-encoded as
+    # the browser handed them to us in the PushSubscription's `keys`.
+    p256dh = Column(Text, default="")
+    auth = Column(Text, default="")
+    created_at = Column(UTCDateTime, default=utc_now)
+    last_used_at = Column(UTCDateTime, nullable=True)
+
+
+class PushDispatchLog(Base):
+    """Server-side dedup for background push, mirroring one-to-one the
+    localStorage logs the client-side schedulers keep while a tab is open
+    (`prod-dashboard:notified-task-events` in useNotificationScheduler.ts /
+    `ai-workspace:notified-token-events` in useTokenRefreshScheduler.ts):
+      task  -> f"{task.id}:soon" | f"{task.id}:overdue"
+      token -> f"{account.id}:{reminder_iso}:soon" | "...:reached"
+    One row per (user, key) ever sent means repeated /api/push/dispatch
+    runs (uptime bot every 5 min, GitHub Actions fallback, manual curls)
+    can overlap freely without anyone ever getting the same alert twice.
+    Rows older than 30 days are swept by the dispatcher itself."""
+    __tablename__ = "push_dispatch_log"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    dedup_key = Column(String(255), nullable=False)
+    sent_at = Column(UTCDateTime, default=utc_now, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "dedup_key", name="uq_push_dispatch_user_dedup"),
+    )
