@@ -27,6 +27,10 @@ from .. import models, schemas
 from ..activity_log import log_activity
 from ..auth_dependencies import get_current_user
 from ..ownership_helpers import get_owned_or_404, owned_query
+# Instant background alerts: pushing a just-created/just-moved token-refresh
+# reminder immediately instead of waiting up to five minutes for the
+# /api/push/dispatch uptime ping (see routers/push.py).
+from .push import dispatch_for_user_now
 
 router = APIRouter(prefix="/api/ai-accounts", tags=["ai-workspace"])
 
@@ -120,6 +124,9 @@ def create_ai_account(
     db.commit()
     db.refresh(account)
     log_activity(db, f'Added AI account "{account.name}"', icon="bot", user_id=current_user.id)
+    # A new account can arrive with a token-refresh reminder already inside
+    # the alert windows -- push it now rather than on the next uptime ping.
+    dispatch_for_user_now(db, current_user.id, account_ids=[account.id])
     return serialize_account(account)
 
 
@@ -138,6 +145,9 @@ def update_ai_account(
     db.refresh(account)
     if status_changed:
         log_activity(db, f'"{account.name}" status changed to {account.status.value}', icon="bot", user_id=current_user.id)
+    # Reminder created/moved/cleared -- re-check this account's alert state
+    # instantly. Fire-and-forget; never fails the PATCH.
+    dispatch_for_user_now(db, current_user.id, account_ids=[account.id])
     return serialize_account(account)
 
 

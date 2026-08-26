@@ -13,17 +13,26 @@ Two halves:
    background delivery gets one row (endpoint is unique per browser
    profile), so notifications fan out to all of them.
 
-2. `/dispatch` -- called by an external pinger (the user's uptime bot,
-   or the fallback GitHub Actions workflow) every few minutes. It
-   replays the *exact same* checks and message copy the two client
-   schedulers perform while the tab is open, deduplicated server-side
-   via models.PushDispatchLog (the DB analogue of their localStorage
-   logs) so overlapping triggers can never double-send. Guarded by
-   DISPATCH_SECRET rather than user auth because it runs unattended;
+2. `/dispatch` + `dispatch_for_user_now()` -- two triggers over one
+   shared engine (`_dispatch_for_user`). The pinger (uptime bot, or the
+   fallback GitHub Actions workflow) hits `/dispatch` every few minutes;
+   that remains the only way *time-only* transitions can be caught --
+   a deadline quietly going overdue fires no API call, so nothing else
+   could notice. Everything that DOES ride an API call -- creating a task
+   due in 20 minutes, moving a reminder up -- is pushed instantly via
+   `dispatch_for_user_now()`, which routers/tasks.py and
+   routers/ai_accounts.py call right after their commit. Both replay the
+   *exact same* checks and message copy the two client schedulers
+   perform while the tab is open, deduplicated server-side via
+   models.PushDispatchLog (the DB analogue of their localStorage logs)
+   so overlapping triggers can never double-send. `/dispatch` is guarded
+   by DISPATCH_SECRET rather than user auth because it runs unattended;
    both a header form (GitHub Actions) and a query-param form (uptime
    monitors that can't send custom headers) are accepted.
 
-Additive module -- no existing router, model, or behavior is touched.
+No existing router, model, or behavior is modified -- the two mutation
+hooks are single fire-and-forget calls appended after already-committed
+work, safe to remove without a trace.
 """
 import json
 import os
@@ -200,6 +209,10 @@ def send_test_push(
                 },
                 data=message,
                 ttl=PUSH_TTL_SECONDS,
+                # Urgency: high so the test behaves exactly like the real
+                # alerts -- waking a dozing phone instead of sitting in
+                # FCM's normal-priority queue until the device next wakes.
+                headers={"Urgency": "high"},
                 vapid_private_key=os.environ.get("VAPID_PRIVATE_KEY", ""),
                 vapid_claims=vapid_claims,
             )
@@ -219,18 +232,24 @@ def send_test_push(
     return {"sent": sent, "pruned": pruned, "failed": failed}
 
 
-def _collect_task_events(db: Session, user_id: str, now) -> List[Tuple[str, str, str, str]]:
+def _collect_task_events(
+    db: Session, user_id: str, now, task_ids: Optional[List[str]] = None
+) -> List[Tuple[str, str, str, str]]:
     """(dedup_key, title, body, url) tuples for tasks entering their final
     hour / first going overdue. Mirrors useNotificationScheduler.ts line
     for line -- same skip conditions (`done`, no deadline), same windows,
-    same copy, same `${task.id}:soon|overdue` keys."""
+    same copy, same `${task.id}:soon|overdue` keys. Pass task_ids to scope
+    the scan to specific tasks (the instant-dispatch path does, so a
+    mutation only alerts about the record it just touched)."""
     events: List[Tuple[str, str, str, str]] = []
-    tasks = (
+    task_query = (
         owned_query(db, models.Task, user_id)
         .filter(models.Task.status != models.TaskStatus.done)
         .filter(models.Task.deadline.isnot(None))
-        .all()
     )
+    if task_ids is not None:
+        task_query = task_query.filter(models.Task.id.in_(task_ids))
+    tasks = task_query.all()
     for task in tasks:
         minutes_left = (task.deadline - now).total_seconds() / 60
         if minutes_left <= 0:
@@ -254,18 +273,23 @@ def _collect_task_events(db: Session, user_id: str, now) -> List[Tuple[str, str,
     return events
 
 
-def _collect_token_events(db: Session, user_id: str, now) -> List[Tuple[str, str, str, str]]:
+def _collect_token_events(
+    db: Session, user_id: str, now, account_ids: Optional[List[str]] = None
+) -> List[Tuple[str, str, str, str]]:
     """Same mirroring for AI-account token-refresh reminders, against
     AIAccount.token_refresh_reminder_at -- useTokenRefreshScheduler.ts's
     rules and copy, including the reminder ISO timestamp baked into the
     dedup key so changing the reminder time re-arms the alert exactly
-    like the client's `${account.id}:${iso}:soon|reached` key does."""
+    like the client's `${account.id}:${iso}:soon|reached` key does.
+    account_ids scopes the scan like task_ids does above."""
     events: List[Tuple[str, str, str, str]] = []
-    accounts = (
+    account_query = (
         owned_query(db, models.AIAccount, user_id)
         .filter(models.AIAccount.token_refresh_reminder_at.isnot(None))
-        .all()
     )
+    if account_ids is not None:
+        account_query = account_query.filter(models.AIAccount.id.in_(account_ids))
+    accounts = account_query.all()
     for account in accounts:
         iso = account.token_refresh_reminder_at.isoformat()
         minutes_left = (account.token_refresh_reminder_at - now).total_seconds() / 60
@@ -290,6 +314,177 @@ def _collect_token_events(db: Session, user_id: str, now) -> List[Tuple[str, str
     return events
 
 
+def _dispatch_for_user(
+    db: Session,
+    user_id: str,
+    now,
+    task_ids: Optional[List[str]] = None,
+    account_ids: Optional[List[str]] = None,
+) -> Dict[str, int]:
+    """The shared send engine behind both triggers: collect this user's
+    alert-worthy events, skip everything PushDispatchLog already holds,
+    fan each remaining event out to every device, prune dead
+    subscriptions, log dedup rows for whatever at least one device
+    accepted. Returns {"sent", "pruned", "failed"}.
+
+    task_ids/account_ids scope the scan -- instant dispatch passes just
+    the record a mutation touched; the pinger leaves them unset for
+    everything. Commits its own writes under the same transaction-scoped
+    advisory lock the old monolithic pinger held, re-taken per call,
+    which still covers exactly the window that matters (dedup check ->
+    send -> log insert), so a pinger tick and an inline trigger can
+    never both see an empty log for the same event and double-send."""
+    counts: Dict[str, int] = {"sent": 0, "pruned": 0, "failed": 0}
+
+    # Fail fast rather than churning every event into `failed` forever --
+    # without signing keys nothing can ever be delivered.
+    vapid_claims = _vapid_claims()
+    if vapid_claims is None:
+        return counts
+
+    events = _collect_task_events(db, user_id, now, task_ids) + _collect_token_events(
+        db, user_id, now, account_ids
+    )
+    if not events:
+        return counts
+
+    live_subs = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.user_id == user_id)
+        .all()
+    )
+    if not live_subs:
+        return counts
+
+    # Serialize concurrent triggers on Postgres (production) so overlapping
+    # runs -- uptime bot, Actions fallback, an inline mutation hook -- can't
+    # both read an empty dedup log and double-send. Taken only once there's
+    # actual work in sight so idle calls never hold the global lock;
+    # released by the commit/rollback at the bottom. SQLite (local dev) has
+    # no such function and no real concurrency either, hence the gate.
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtext('push_dispatch'))"))
+
+    # Skip everything already delivered (per user + dedup key).
+    existing = {
+        row_key
+        for (row_key,) in db.query(models.PushDispatchLog.dedup_key)
+        .filter(
+            models.PushDispatchLog.user_id == user_id,
+            models.PushDispatchLog.dedup_key.in_([e[0] for e in events]),
+        )
+        .all()
+    }
+    pending = [event for event in events if event[0] not in existing]
+    if not pending:
+        db.rollback()  # release the advisory lock -- nothing to persist
+        return counts
+
+    dead_subs: List[models.PushSubscription] = []
+
+    for dedup_key, title, body, url in pending:
+        message = json.dumps({"title": title, "body": body, "url": url})
+        delivered_to = 0
+        still_live: List[models.PushSubscription] = []
+        for sub in live_subs:
+            try:
+                webpush(
+                    subscription_info={
+                        "endpoint": sub.endpoint,
+                        "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                    },
+                    data=message,
+                    ttl=PUSH_TTL_SECONDS,
+                    # Urgency: high -> FCM delivers as a high-priority
+                    # message that wakes the device out of Doze. Without
+                    # it the push sits at normal urgency and Android
+                    # defers it until the phone next wakes -- i.e. it
+                    # only "arrives" when the app is opened.
+                    headers={"Urgency": "high"},
+                    vapid_private_key=os.environ.get("VAPID_PRIVATE_KEY", ""),
+                    vapid_claims=vapid_claims,
+                )
+                sub.last_used_at = now
+                delivered_to += 1
+                still_live.append(sub)
+            except WebPushException as exc:
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                if status in (404, 410):
+                    # Subscription expired/cleared (site data wiped,
+                    # PWA uninstalled, ...) -- prune so we stop paying
+                    # for it, and drop it from this run's fan-out.
+                    dead_subs.append(sub)
+                    counts["pruned"] += 1
+                else:
+                    # Transient (push service hiccup, bad payload for
+                    # this one device): leave the dedup row unwritten
+                    # below so the next trigger retries -- but keep the
+                    # sub in the live list, since it's healthy and later
+                    # events in this run should still reach it.
+                    counts["failed"] += 1
+                    still_live.append(sub)
+            except Exception:
+                counts["failed"] += 1
+                still_live.append(sub)
+        live_subs = still_live
+        if delivered_to > 0:
+            counts["sent"] += delivered_to
+            db.add(models.PushDispatchLog(user_id=user_id, dedup_key=dedup_key))
+
+    for sub in dead_subs:
+        db.delete(sub)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        # Belt-and-braces for a race the advisory lock above already makes
+        # near-impossible: an overlapping trigger committed its dedup rows
+        # first, so ours collide. Roll back quietly instead of failing the
+        # caller; any sends we made were real and the next trigger
+        # reconciles.
+        db.rollback()
+    return counts
+
+
+def dispatch_for_user_now(
+    db: Session,
+    user_id: str,
+    *,
+    task_ids: Optional[List[str]] = None,
+    account_ids: Optional[List[str]] = None,
+) -> None:
+    """Instant-dispatch entry point for sibling routers: call right after
+    a task / AI-account mutation has committed, so an alert-worthy change
+    -- a deadline set 20 minutes out, a reminder moved up -- reaches every
+    subscribed device within that same request instead of waiting up to
+    five minutes for the next uptime ping. Scope it to the record the
+    mutation touched (task_ids / account_ids) so an unrelated backlog
+    can't ride along on this request's latency.
+
+    Time-only transitions stay with the pinger on purpose: no API call
+    fires when a deadline simply goes overdue by itself, so nothing could
+    relay it except the periodic scan.
+
+    Fire-and-forget by design: every failure is swallowed (and the
+    session rolled back clean) because push delivery must never fail the
+    mutation that triggered it -- whatever this misses, the next pinger
+    retries via the shared dedup log."""
+    try:
+        _dispatch_for_user(
+            db,
+            user_id,
+            utc_now(),
+            # An absent scope here means "this mutation touched nothing of
+            # that kind" -- NOT the pinger's "scan everything". Otherwise a
+            # task edit would sweep unrelated token-reminder alerts onto its
+            # request latency.
+            task_ids=task_ids if task_ids is not None else [],
+            account_ids=account_ids if account_ids is not None else [],
+        )
+    except Exception:
+        db.rollback()
+
+
 # HEAD/OPTIONS exist for uptime monitors: probes arrive in every method
 # flavor depending on the monitor app's default, and any of them that
 # 405s reads as "site down" while silently never triggering a dispatch.
@@ -301,28 +496,26 @@ def dispatch_push_notifications(
     db: Session = Depends(get_db),
 ):
     """Scan every subscriber's tasks/token reminders and push anything
-    new. Idempotent per event via PushDispatchLog, safe to call at any
-    frequency by any number of overlapping triggers. A dedup row is only
-    written once at least one of the user's devices accepted the send,
-    so a transient push-service outage retries on the next ping instead
-    of eating the alert; devices answering 404/410 Gone are pruned on
-    the spot."""
+    new -- one run of the shared _dispatch_for_user engine per
+    subscriber, the same engine routers/tasks.py and
+    routers/ai_accounts.py fire inline after their mutations so
+    API-visible changes arrive instantly; this ping exists for the
+    time-only transitions those hooks can't see (a deadline crossing
+    into overdue on its own). Idempotent per event via PushDispatchLog,
+    safe to call at any frequency by any number of overlapping triggers.
+    A dedup row is only written once at least one of the user's devices
+    accepted the send, so a transient push-service outage retries on the
+    next ping instead of eating the alert; devices answering 404/410 Gone
+    are pruned on the spot."""
     if not _is_authorized(x_dispatch_secret, key):
         raise HTTPException(status_code=403, detail="Forbidden")
 
     # Fail fast rather than churning every event into `failed` forever --
-    # without signing keys nothing can ever be delivered.
-    vapid_claims = _vapid_claims()
-    if vapid_claims is None:
+    # without signing keys nothing can ever be delivered. (The engine
+    # itself treats a missing key as a silent no-op; an attended ping
+    # deserves a visible signal instead.)
+    if _vapid_claims() is None:
         raise HTTPException(status_code=503, detail="Push not configured (VAPID_PRIVATE_KEY missing)")
-
-    # Serialize concurrent runs on Postgres (production) so overlapping
-    # pingers -- uptime bot plus the Actions fallback -- can't both read an
-    # empty dedup log and double-send. Transaction-scoped: released by the
-    # commit/rollback below. SQLite (local dev) has no such function and no
-    # real concurrency either, hence the dialect gate.
-    if db.get_bind().dialect.name == "postgresql":
-        db.execute(text("SELECT pg_advisory_xact_lock(hashtext('push_dispatch'))"))
 
     now = utc_now()
     sent = 0
@@ -330,88 +523,18 @@ def dispatch_push_notifications(
     failed = 0
     users_notified = 0
 
-    # Group subscriptions per user up front so each user's data is
-    # scanned once regardless of how many devices they carry.
-    subs_by_user: Dict[str, List[models.PushSubscription]] = {}
-    for sub in db.query(models.PushSubscription).all():
-        subs_by_user.setdefault(sub.user_id, []).append(sub)
-
-    for user_id, live_subs in subs_by_user.items():
-        events = _collect_task_events(db, user_id, now) + _collect_token_events(db, user_id, now)
-        if not events:
-            continue
-
-        # Skip everything already delivered (per user + dedup key).
-        existing = {
-            row_key
-            for (row_key,) in db.query(models.PushDispatchLog.dedup_key)
-            .filter(
-                models.PushDispatchLog.user_id == user_id,
-                models.PushDispatchLog.dedup_key.in_([e[0] for e in events]),
-            )
-            .all()
-        }
-        pending = [event for event in events if event[0] not in existing]
-        if not pending:
-            continue
-
-        dead_subs: List[models.PushSubscription] = []
-        user_got_something = False
-
-        for dedup_key, title, body, url in pending:
-            message = json.dumps({"title": title, "body": body, "url": url})
-            delivered_to = 0
-            still_live: List[models.PushSubscription] = []
-            for sub in live_subs:
-                try:
-                    webpush(
-                        subscription_info={
-                            "endpoint": sub.endpoint,
-                            "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
-                        },
-                        data=message,
-                        ttl=PUSH_TTL_SECONDS,
-                        # Urgency: high -> FCM delivers as a high-priority
-                        # message that wakes the device out of Doze. Without
-                        # it the push sits at normal urgency and Android
-                        # defers it until the phone next wakes -- i.e. it
-                        # only "arrives" when the app is opened.
-                        headers={"Urgency": "high"},
-                        vapid_private_key=os.environ.get("VAPID_PRIVATE_KEY", ""),
-                        vapid_claims=vapid_claims,
-                    )
-                    sub.last_used_at = now
-                    delivered_to += 1
-                    still_live.append(sub)
-                except WebPushException as exc:
-                    status = getattr(getattr(exc, "response", None), "status_code", None)
-                    if status in (404, 410):
-                        # Subscription expired/cleared (site data wiped,
-                        # PWA uninstalled, ...) -- prune so we stop paying
-                        # for it, and drop it from this run's fan-out.
-                        dead_subs.append(sub)
-                        pruned += 1
-                    else:
-                        # Transient (push service hiccup, bad payload for
-                        # this one device): leave the dedup row unwritten
-                        # below so the next run retries -- but keep the sub
-                        # in the live list, since it's healthy and later
-                        # events in this run should still reach it.
-                        failed += 1
-                        still_live.append(sub)
-                except Exception:
-                    failed += 1
-                    still_live.append(sub)
-            live_subs = still_live
-            if delivered_to > 0:
-                sent += delivered_to
-                user_got_something = True
-                db.add(models.PushDispatchLog(user_id=user_id, dedup_key=dedup_key))
-
-        for sub in dead_subs:
-            db.delete(sub)
-
-        if user_got_something:
+    # One engine run per subscriber (not per device): the engine fans out
+    # to all of a user's devices itself.
+    subscriber_ids = [
+        row[0]
+        for row in db.query(models.PushSubscription.user_id).distinct().all()
+    ]
+    for user_id in sorted(subscriber_ids):
+        counts = _dispatch_for_user(db, user_id, now)
+        sent += counts["sent"]
+        pruned += counts["pruned"]
+        failed += counts["failed"]
+        if counts["sent"] > 0:
             users_notified += 1
 
     # Sweep stale dedup rows so the log table stays tiny.
@@ -423,10 +546,9 @@ def dispatch_push_notifications(
     try:
         db.commit()
     except IntegrityError:
-        # Belt-and-braces for a race the advisory lock above already makes
-        # near-impossible: an overlapping run committed its dedup rows
-        # first, so ours collide. Roll back quietly instead of 500ing the
-        # monitor; any sends we made were real and the next ping reconciles.
+        # Belt-and-braces alongside the engine's own guard: roll back
+        # quietly instead of 500ing the monitor; the sweep simply retries
+        # on the next ping.
         db.rollback()
     return {
         "users_notified": users_notified,

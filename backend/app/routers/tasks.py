@@ -21,6 +21,10 @@ from .. import models, schemas
 from ..urgency import compute_urgency
 from ..auth_dependencies import get_current_user
 from ..ownership_helpers import get_owned_or_404, owned_query
+# Instant background alerts: pushing a just-created/just-changed deadline
+# immediately instead of waiting up to five minutes for the /api/push/dispatch
+# uptime ping (see routers/push.py).
+from .push import dispatch_for_user_now
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -74,6 +78,9 @@ def create_task(
     db.commit()
     db.refresh(task)
     log_activity(db, f'Created task "{task.title}"', icon="plus-circle", user_id=current_user.id)
+    # If the new deadline is already inside the alert windows, push it to
+    # every device now rather than on the next uptime ping. Fire-and-forget.
+    dispatch_for_user_now(db, current_user.id, task_ids=[task.id])
     return serialize_task(task)
 
 
@@ -117,6 +124,10 @@ def update_task(
         log_activity(db, f'Completed "{task.title}"', icon="check-circle", user_id=current_user.id)
     else:
         log_activity(db, f'Updated "{task.title}"', icon="pencil", user_id=current_user.id)
+
+    # Deadline moved into (or out of) the alert windows -- re-check this
+    # task's alert state instantly. Fire-and-forget; never fails the PATCH.
+    dispatch_for_user_now(db, current_user.id, task_ids=[task.id])
 
     return serialize_task(task)
 
