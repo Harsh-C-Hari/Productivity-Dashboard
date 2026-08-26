@@ -580,4 +580,10 @@ def dispatch_push_notifications(
         "notifications_sent": sent,
         "subscriptions_pruned": pruned,
         "failed": failed,
+        # Delivery debugging: exactly how many devices are registered
+        # across all accounts right now. A test reaching fewer devices
+        # than you carry means the missing ones simply aren't registered
+        # server-side -- each device repairs itself the next time its
+        # Settings page is opened.
+        "subscriptions_tracked": len(subscriber_ids),
     }
