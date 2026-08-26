@@ -172,6 +172,31 @@ def delete_subscription(
     return {"ok": True, "deleted": deleted}
 
 
+@router.post("/subscriptions/status")
+def subscription_status(
+    payload: schemas.PushSubscriptionDelete,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Does THIS browser's endpoint still have a live registration row for
+    the caller? Lets the Settings page detect the stale-local-subscription
+    trap: a device can hold a perfectly healthy-looking PushSubscription
+    whose server row was pruned (404/410 housekeeping) or never landed,
+    so its UI claims background alerts are on while dispatch quietly fans
+    out to one device fewer. The page auto-repairs by re-POSTing the
+    subscription when this answers False."""
+    registered = (
+        db.query(models.PushSubscription.id)
+        .filter(
+            models.PushSubscription.user_id == current_user.id,
+            models.PushSubscription.endpoint == payload.endpoint,
+        )
+        .first()
+        is not None
+    )
+    return {"registered": registered}
+
+
 @router.post("/test")
 def send_test_push(
     db: Session = Depends(get_db),

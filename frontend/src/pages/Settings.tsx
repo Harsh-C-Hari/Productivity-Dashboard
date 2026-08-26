@@ -24,9 +24,26 @@ export default function Settings() {
   const [pushBusy, setPushBusy] = useState(false);
 
   useEffect(() => {
-    getDevicePushState()
-      .then(setPushState)
-      .catch(() => setPushState(null));
+    (async () => {
+      try {
+        const state = await getDevicePushState();
+        setPushState(state);
+        // Repair the stale-local-subscription trap on sight: a browser can
+        // report "subscribed" while the server's row is long gone (pruned
+        // as a dead endpoint, or the original POST never landed) -- then
+        // test pushes quietly reach one device fewer than this page
+        // claims. Re-POSTing re-registers the same endpoint.
+        if (state.subscribed && state.endpoint) {
+          const { registered } = await api.getPushRegistrationStatus(state.endpoint);
+          if (!registered) {
+            await subscribeToPush();
+            toast("This device had dropped off background alerts — re-registered", "info");
+          }
+        }
+      } catch {
+        setPushState(await getDevicePushState().catch(() => null));
+      }
+    })();
   }, []);
 
   async function enableBackgroundAlerts() {
@@ -65,9 +82,12 @@ export default function Settings() {
     try {
       const result = await api.sendTestPush();
       if (result.sent > 0) {
+        // Always name the exact device count -- "1" vs "2" is the single
+        // most useful debugging signal this button produces (it answers
+        // "is THIS device actually registered?" at a glance).
         toast(
           result.sent === 1
-            ? "Test push sent — check your notifications"
+            ? "Test push sent to 1 device — if it's not this one, re-enable push here"
             : `Test push sent to ${result.sent} devices`,
           "success"
         );

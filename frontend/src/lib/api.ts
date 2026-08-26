@@ -1161,6 +1161,11 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify({ endpoint }),
     }),
+  getPushRegistrationStatus: (endpoint: string) =>
+    request<{ registered: boolean }>("/api/push/subscriptions/status", {
+      method: "POST",
+      body: JSON.stringify({ endpoint }),
+    }),
   sendTestPush: () =>
     request<{ sent: number; pruned: number; failed: number }>("/api/push/test", {
       method: "POST",

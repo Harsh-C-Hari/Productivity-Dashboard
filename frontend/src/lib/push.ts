@@ -30,6 +30,10 @@ export function isPushSupported(): boolean {
 export interface DevicePushState {
   supported: boolean;
   subscribed: boolean;
+  // This device's push endpoint URL when subscribed -- Settings uses it to
+  // ask the backend whether the server still holds this row
+  // ("subscribed" above only reflects the browser's local record).
+  endpoint: string | null;
   permission: NotificationPermission | "unsupported";
 }
 
@@ -60,16 +64,22 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export async function getDevicePushState(): Promise<DevicePushState> {
-  if (!isPushSupported()) return { supported: false, subscribed: false, permission: getPermission() };
+  if (!isPushSupported())
+    return { supported: false, subscribed: false, endpoint: null, permission: getPermission() };
 
   try {
     const reg = await getRegistration();
     const sub = reg ? await reg.pushManager.getSubscription() : null;
-    return { supported: true, subscribed: !!sub, permission: Notification.permission };
+    return {
+      supported: true,
+      subscribed: !!sub,
+      endpoint: sub?.endpoint ?? null,
+      permission: Notification.permission,
+    };
   } catch {
     // Some browsers throw on pushManager access when permission was
     // permanently dismissed; degrade to an honest "not subscribed".
-    return { supported: true, subscribed: false, permission: Notification.permission };
+    return { supported: true, subscribed: false, endpoint: null, permission: Notification.permission };
   }
 }
 
@@ -82,11 +92,35 @@ function toSubscriptionInput(sub: PushSubscription): PushSubscriptionInput {
 }
 
 /**
+ * True when this subscription was minted under the same VAPID public key
+ * the app is configured with right now. A stale one can exist if the
+ * deployed key ever changed: the browser happily hands back its old
+ * PushSubscription, but the push service rejects every send signed with
+ * the current backend key, so such a subscription must be replaced --
+ * re-POSTing it would just register something undeliverable.
+ */
+function matchesConfiguredKey(sub: PushSubscription): boolean {
+  try {
+    const optionsKey = sub.options?.applicationServerKey;
+    if (!optionsKey) return false;
+    // Runtime-safe either way: an ArrayBuffer is read directly, a typed
+    // array view is copied element-wise.
+    const actual = new Uint8Array(optionsKey as ArrayBuffer);
+    const expected = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+    return actual.length === expected.length && expected.every((byte, i) => actual[i] === byte);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ask for notification permission if needed, subscribe this device via
  * PushManager, and register the subscription with the backend so
  * /api/push/dispatch includes it. Idempotent: an existing subscription is
- * re-POSTed (the backend upserts by endpoint). Throws so the caller can
- * surface a toast; every failure leaves prior state untouched.
+ * re-POSTed (the backend upserts by endpoint) -- unless it was minted
+ * under a different VAPID key, in which case it's replaced first. Throws
+ * so the caller can surface a toast; every failure leaves prior state
+ * untouched.
  */
 export async function subscribeToPush(): Promise<void> {
   if (!isPushSupported()) throw new Error("Push isn't supported on this device/browser");
@@ -100,6 +134,12 @@ export async function subscribeToPush(): Promise<void> {
   if (!reg) throw new Error("App shell still loading — try again in a moment");
 
   let sub = await reg.pushManager.getSubscription();
+  if (sub && !matchesConfiguredKey(sub)) {
+    // Stale key pair -- see matchesConfiguredKey. Start clean rather than
+    // re-registering an endpoint no push will ever reach.
+    await sub.unsubscribe().catch(() => undefined);
+    sub = null;
+  }
   if (!sub) {
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
