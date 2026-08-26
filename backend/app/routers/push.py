@@ -371,6 +371,12 @@ def dispatch_push_notifications(
                         },
                         data=message,
                         ttl=PUSH_TTL_SECONDS,
+                        # Urgency: high -> FCM delivers as a high-priority
+                        # message that wakes the device out of Doze. Without
+                        # it the push sits at normal urgency and Android
+                        # defers it until the phone next wakes -- i.e. it
+                        # only "arrives" when the app is opened.
+                        headers={"Urgency": "high"},
                         vapid_private_key=os.environ.get("VAPID_PRIVATE_KEY", ""),
                         vapid_claims=vapid_claims,
                     )
